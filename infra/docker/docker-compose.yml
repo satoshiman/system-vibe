@@ -1,0 +1,85 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: systemvibe-postgres
+    environment:
+      POSTGRES_USER: ${DB_USER:-systemvibe}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-devpassword}
+      POSTGRES_DB: ${DB_NAME:-systemvibe}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U systemvibe"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - systemvibe
+
+  # Redis Cache & Queue
+  redis:
+    image: redis:7-alpine
+    container_name: systemvibe-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - systemvibe
+
+  # Nginx Reverse Proxy (optional, for learning)
+  nginx:
+    image: nginx:alpine
+    container_name: systemvibe-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - api
+    networks:
+      - systemvibe
+
+  # API Server
+  api:
+    build:
+      context: ../../
+      dockerfile: apps/api/Dockerfile
+    container_name: systemvibe-api
+    environment:
+      NODE_ENV: development
+      API_PORT: 3000
+      DATABASE_URL: postgresql://${DB_USER:-systemvibe}:${DB_PASSWORD:-devpassword}@postgres:5432/${DB_NAME:-systemvibe}
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    volumes:
+      - ../../apps/api/src:/app/src
+      - ../../apps/api/dist:/app/dist
+    command: npm run dev
+    networks:
+      - systemvibe
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  systemvibe:
+    driver: bridge
