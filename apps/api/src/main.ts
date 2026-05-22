@@ -1,6 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import * as pino from 'pino';
+import pino from 'pino';
 
 const logger = pino();
 
