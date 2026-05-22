@@ -1,0 +1,32 @@
+{
+  "name": "systemvibe-api",
+  "version": "0.1.0",
+  "description": "SystemVibe API Server",
+  "main": "dist/main.js",
+  "scripts": {
+    "start": "node dist/main",
+    "dev": "nest start --watch",
+    "build": "nest build",
+    "test": "jest",
+    "lint": "eslint src",
+    "format": "prettier --write src"
+  },
+  "dependencies": {
+    "@nestjs/common": "^10.0.0",
+    "@nestjs/core": "^10.0.0",
+    "@nestjs/platform-express": "^10.0.0",
+    "reflect-metadata": "^0.1.13",
+    "rxjs": "^7.8.0",
+    "pino": "^8.0.0",
+    "pino-pretty": "^10.0.0"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^10.0.0",
+    "@types/node": "^20.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.0.0",
+    "prettier": "^3.0.0",
+    "typescript": "^5.0.0"
+  }
+}
