@@ -1,0 +1,16 @@
+{
+  "name": "@systemvibe/database",
+  "version": "0.1.0",
+  "main": "generated/index.js",
+  "scripts": {
+    "migrate:dev": "prisma migrate dev",
+    "migrate:deploy": "prisma migrate deploy",
+    "studio": "prisma studio"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.0.0"
+  },
+  "devDependencies": {
+    "prisma": "^5.0.0"
+  }
+}
