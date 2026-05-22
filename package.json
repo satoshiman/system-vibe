@@ -1,0 +1,19 @@
+{
+  "name": "systemvibe",
+  "version": "0.1.0",
+  "description": "Distributed task processing platform for learning system design",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --ws",
+    "build": "npm run build --ws",
+    "test": "npm run test --ws",
+    "lint": "npm run lint --ws"
+  },
+  "keywords": ["nestjs", "redis", "bullmq", "docker", "distributed-systems"],
+  "author": "Your Name",
+  "license": "MIT"
+}
