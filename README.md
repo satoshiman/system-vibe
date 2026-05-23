@@ -219,6 +219,58 @@ cd infra/docker
 docker compose up -d --build
 ```
 
+**From Docker Dev to Production Mode:**
+
+Edit `infra/docker/docker-compose.yml`:
+
+**Remove these lines (volumes section):**
+
+```yaml
+volumes:
+  - ../../apps/api/src:/app/src:ro
+  - ../../apps/api/package.json:/app/package.json:ro
+  - ../../apps/api/tsconfig.json:/app/tsconfig.json:ro
+```
+
+**Change command:**
+
+```yaml
+command: npm start # Was: npm run start:dev
+```
+
+Then rebuild:
+
+```bash
+cd infra/docker
+docker compose up -d --build
+```
+
+**From Production to Docker Dev Mode:**
+
+Edit `infra/docker/docker-compose.yml`:
+
+**Add these lines before `command`:**
+
+```yaml
+volumes:
+  - ../../apps/api/src:/app/src:ro
+  - ../../apps/api/package.json:/app/package.json:ro
+  - ../../apps/api/tsconfig.json:/app/tsconfig.json:ro
+```
+
+**Change command:**
+
+```yaml
+command: npm run start:dev # Was: npm start
+```
+
+Then rebuild:
+
+```bash
+cd infra/docker
+docker compose up -d --build
+```
+
 ### Building for Production
 
 ```bash
