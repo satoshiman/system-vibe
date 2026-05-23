@@ -5,6 +5,7 @@ A distributed systems platform built with NestJS, PostgreSQL, Redis, and Docker.
 ## Overview
 
 SystemVibe is a scalable backend infrastructure designed for distributed applications, featuring:
+
 - RESTful API with NestJS
 - PostgreSQL database with Prisma ORM
 - Redis for caching and queuing
@@ -43,6 +44,7 @@ docker compose up -d
 ```
 
 This will start:
+
 - PostgreSQL on port 5433
 - Redis on port 6379
 - API Server on port 3000
@@ -116,6 +118,7 @@ cp .env.example .env
 ```
 
 Available variables:
+
 - `NODE_ENV`: development | production
 - `DB_USER`: PostgreSQL username (default: systemvibe)
 - `DB_PASSWORD`: PostgreSQL password (default: devpassword)
@@ -124,19 +127,96 @@ Available variables:
 
 ## Development
 
-### Local Development (without Docker)
+There are two development modes available:
+
+### Mode 1: Local Development (Recommended)
+
+Run the API locally with hot reload, while PostgreSQL and Redis run in Docker.
+
+**Setup:**
 
 ```bash
-# Install dependencies
-npm install
-
-# Start PostgreSQL and Redis with Docker
+# Terminal 1: Start database and Redis
 cd infra/docker
+docker compose up -d postgres redis
+
+# Terminal 2: Run API locally
+cd apps/api
+npm install
+npm run start:dev
+```
+
+**Advantages:**
+
+- Hot reload enabled - changes reflect immediately
+- Full IDE debugging support
+- No Docker rebuilds needed
+- Faster development cycle
+
+**Access API:**
+
+```bash
+curl http://localhost:3000/api/health
+```
+
+### Mode 2: Docker Dev Mode
+
+Run all services in Docker with volume mounts for hot reload.
+
+**Setup:**
+
+```bash
+cd infra/docker
+docker compose up -d --build
+```
+
+**How it works:**
+
+- Source code is mounted into the container as read-only volumes
+- `npm run start:dev` runs inside the container with hot reload
+- Edit code locally, container auto-reloads
+
+**Monitor logs:**
+
+```bash
+docker compose logs -f api
+```
+
+**Advantages:**
+
+- Consistent environment with production
+- All services in one command
+- Still supports hot reload
+
+**Limitations:**
+
+- Adding new dependencies requires container rebuild
+- Slightly slower than local development
+
+### Switching Between Modes
+
+**From Docker Dev to Local:**
+
+```bash
+# Stop Docker services
+cd infra/docker
+docker compose down
+
+# Start only DB/Redis
 docker compose up -d postgres redis
 
 # Run API locally
 cd apps/api
 npm run start:dev
+```
+
+**From Local to Docker Dev:**
+
+```bash
+# Stop local API (Ctrl+C)
+# Start all services in Docker
+cd infra/docker
+docker compose up -d --build
 ```
 
 ### Building for Production
@@ -164,6 +244,7 @@ GET /api/health
 Returns the health status of all services.
 
 **Response:**
+
 ```json
 {
   "status": "healthy",
