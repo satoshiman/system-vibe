@@ -1,17 +1,21 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import pino from 'pino';
+import * as dotenv from 'dotenv';
+
+// Load .env from root directory (assumes running from project root)
+dotenv.config();
 
 const logger = pino();
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  
+
   app.setGlobalPrefix('api');
-  
+
   const port = process.env.API_PORT || 3000;
   await app.listen(port, '0.0.0.0');
-  
+
   logger.info(`API Server running on http://localhost:${port}`);
 }
 
