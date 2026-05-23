@@ -1,6 +1,6 @@
 # SystemVibe - Distributed Task Processing Platform
 
-**Tagline**: *Learn production-grade system design through building a distributed task queue with Redis, Docker, workers, events, and complete observability.*
+**Tagline**: _Learn production-grade system design through building a distributed task queue with Redis, Docker, workers, events, and complete observability._
 
 **Status**: Open-source learning project | **Timeline**: 4-6 weeks | **Target**: Junior backend developers & DevOps engineers
 
@@ -11,19 +11,21 @@
 ### 1.1 Core Vision
 
 **SystemVibe** is a production-style distributed task processing platform designed as a comprehensive learning project. It demonstrates how to build scalable backend systems using:
+
 - **Event-driven architecture** with Redis Streams for async processing
 - **Worker-based job queue** pattern using BullMQ
 - **Real-time communication** via WebSockets and Redis Pub/Sub
 - **Complete observability** with metrics, logging, and distributed tracing
 - **Containerized infrastructure** with Docker Compose
 
-By building SystemVibe, developers learn not just *what* distributed systems are, but *how to build them in production*.
+By building SystemVibe, developers learn not just _what_ distributed systems are, but _how to build them in production_.
 
 ### 1.2 Primary Learning Outcomes
 
 **PRIMARY GOAL: Practical Redis Mastery at Scale**
 
 After completing SystemVibe, you will be a Redis expert who can:
+
 - Design and implement production-grade Redis patterns for different use cases
 - Understand when to use Queues vs. Streams vs. Pub/Sub vs. Caching
 - Build distributed systems that rely on Redis as the coordination backbone
@@ -72,7 +74,9 @@ After completing SystemVibe, you will be a Redis expert who can:
 This is your guide to becoming a Redis expert through SystemVibe. Each phase teaches specific Redis patterns and trade-offs.
 
 ### Pattern 1: Queues with BullMQ (Phase 3)
+
 **What You'll Learn**:
+
 - How job queues work under the hood (Streams-based)
 - FIFO ordering vs. priority queues
 - Job states and transitions
@@ -81,6 +85,7 @@ This is your guide to becoming a Redis expert through SystemVibe. Each phase tea
 - Scaling: multiple workers consuming from same queue
 
 **Real-World Use Cases**:
+
 ```
 - Background job processing
 - Task scheduling
@@ -90,6 +95,7 @@ This is your guide to becoming a Redis expert through SystemVibe. Each phase tea
 ```
 
 **Key Commands**:
+
 ```redis
 XADD queue:image job-123
 XLEN queue:image
@@ -98,6 +104,7 @@ XACK queue:image consumer-group job-123
 ```
 
 **Metrics to Track**:
+
 - Queue depth (jobs waiting)
 - Processing rate (jobs/second)
 - P99 latency (how long jobs wait)
@@ -106,7 +113,9 @@ XACK queue:image consumer-group job-123
 ---
 
 ### Pattern 2: Caching with TTL (Phase 6)
+
 **What You'll Learn**:
+
 - Cache strategy: write-through vs. write-behind
 - TTL (Time To Live) for automatic expiration
 - Cache invalidation strategies
@@ -115,6 +124,7 @@ XACK queue:image consumer-group job-123
 - Memory management and eviction policies
 
 **Real-World Use Cases**:
+
 ```
 - Database query result caching
 - API response caching
@@ -123,6 +133,7 @@ XACK queue:image consumer-group job-123
 ```
 
 **Key Commands**:
+
 ```redis
 SET cache:user:123 '{"name":"John"}' EX 3600
 GET cache:user:123
@@ -132,21 +143,22 @@ EXPIRE cache:user:123 7200  # Update TTL
 ```
 
 **Cache Strategies You'll Implement**:
+
 ```typescript
 // Strategy 1: Cache-Aside (Lazy Loading)
 async function getUser(id) {
   const cached = await redis.get(`cache:user:${id}`);
   if (cached) return JSON.parse(cached);
-  
+
   const user = await db.getUser(id);
-  await redis.set(`cache:user:${id}`, JSON.stringify(user), 'EX', 3600);
+  await redis.set(`cache:user:${id}`, JSON.stringify(user), "EX", 3600);
   return user;
 }
 
 // Strategy 2: Write-Through
 async function updateUser(id, data) {
   const user = await db.updateUser(id, data);
-  await redis.set(`cache:user:${id}`, JSON.stringify(user), 'EX', 3600);
+  await redis.set(`cache:user:${id}`, JSON.stringify(user), "EX", 3600);
   return user;
 }
 
@@ -158,14 +170,17 @@ async function deleteUser(id) {
 ```
 
 **Monitoring**:
-- Cache hit rate: (hits / (hits + misses)) * 100
+
+- Cache hit rate: (hits / (hits + misses)) \* 100
 - Memory usage trend
 - Eviction rate
 
 ---
 
 ### Pattern 3: Pub/Sub for Real-Time Events (Phase 5)
+
 **What You'll Learn**:
+
 - Publisher/Subscriber pattern
 - Multiple subscribers on same channel
 - Fire-and-forget messaging (no persistence)
@@ -174,6 +189,7 @@ async function deleteUser(id) {
 - Performance characteristics
 
 **Real-World Use Cases**:
+
 ```
 - Real-time notifications
 - Chat messages
@@ -183,6 +199,7 @@ async function deleteUser(id) {
 ```
 
 **Key Commands**:
+
 ```redis
 PUBLISH job:completed '{"jobId":"123","status":"COMPLETED"}'
 SUBSCRIBE job:completed
@@ -193,6 +210,7 @@ PUBSUB NUMSUB job:completed
 ```
 
 **Architecture Pattern**:
+
 ```
 Worker publishes:
 PUBLISH job:progress:uuid {"progress":50,"eta":"5m"}
@@ -206,6 +224,7 @@ WebSocket clients receive real-time update
 ```
 
 **Important Limitation**:
+
 - Pub/Sub has NO message persistence
 - If no subscriber is listening, message is lost
 - Solution for critical events: use Streams instead
@@ -213,7 +232,9 @@ WebSocket clients receive real-time update
 ---
 
 ### Pattern 4: Streams for Durable Event Logs (Phase 9 - Nice-to-Have)
+
 **What You'll Learn**:
+
 - Event sourcing pattern
 - Consumer groups for distributed processing
 - Message persistence and replay
@@ -221,6 +242,7 @@ WebSocket clients receive real-time update
 - Trade-offs vs. Pub/Sub (slower but durable)
 
 **Real-World Use Cases**:
+
 ```
 - Audit logs
 - Event sourcing
@@ -229,6 +251,7 @@ WebSocket clients receive real-time update
 ```
 
 **Key Commands**:
+
 ```redis
 XADD stream:events * field value
 XLEN stream:events
@@ -239,6 +262,7 @@ XACK stream:events consumer-group message-id
 ```
 
 **Pub/Sub vs. Streams Comparison**:
+
 ```
                     Pub/Sub          Streams
 Persistence         ✗ None           ✓ Durable
@@ -252,7 +276,9 @@ Performance         Faster           Slightly slower
 ---
 
 ### Pattern 5: Atomic Operations for Rate Limiting (Phase 8)
+
 **What You'll Learn**:
+
 - Atomic increment operations
 - Distributed rate limiting algorithms
 - Token bucket pattern
@@ -260,6 +286,7 @@ Performance         Faster           Slightly slower
 - Race condition prevention
 
 **Real-World Use Cases**:
+
 ```
 - API rate limiting
 - User throttling
@@ -268,6 +295,7 @@ Performance         Faster           Slightly slower
 ```
 
 **Key Commands**:
+
 ```redis
 INCR rate_limit:user:123
 EXPIRE rate_limit:user:123 3600
@@ -276,53 +304,58 @@ GETEX rate_limit:user:123 EX 3600
 ```
 
 **Implementation - Fixed Window**:
+
 ```typescript
 async function isRateLimited(userId: string, limit: number): Promise<boolean> {
   const key = `rate_limit:user:${userId}`;
   const current = await redis.incr(key);
-  
+
   if (current === 1) {
     // First request in this window
-    await redis.expire(key, 3600);  // 1 hour window
+    await redis.expire(key, 3600); // 1 hour window
   }
-  
+
   return current > limit;
 }
 ```
 
 **Implementation - Sliding Window with Streams** (More accurate):
+
 ```typescript
 async function isRateLimited(userId: string, limit: number, window: number) {
   const key = `rate_limit:${userId}`;
   const now = Date.now();
-  const windowStart = now - (window * 1000);
-  
+  const windowStart = now - window * 1000;
+
   // Remove old requests
-  await redis.zremrangebyscore(key, '-inf', windowStart);
-  
+  await redis.zremrangebyscore(key, "-inf", windowStart);
+
   // Count recent requests
   const count = await redis.zcard(key);
-  
+
   if (count >= limit) {
     return true;
   }
-  
+
   // Add current request
   await redis.zadd(key, now, `${now}-${Math.random()}`);
   await redis.expire(key, window);
-  
+
   return false;
 }
 ```
 
 **Metrics to Track**:
+
 - Rate limit hit rate (how often users get throttled)
 - Limit effectiveness (are aggressive users stopped?)
 
 ---
 
 ### Pattern 6: Distributed Locks (Phase 11 - Nice-to-Have)
+
 **What You'll Learn**:
+
 - Race condition prevention
 - Lock ownership and timeouts
 - Deadlock avoidance
@@ -330,6 +363,7 @@ async function isRateLimited(userId: string, limit: number, window: number) {
 - Trade-offs between safety and complexity
 
 **Real-World Use Cases**:
+
 ```
 - Singleton cron job execution (only one instance runs)
 - Preventing duplicate processing
@@ -338,6 +372,7 @@ async function isRateLimited(userId: string, limit: number, window: number) {
 ```
 
 **Key Commands**:
+
 ```redis
 SET lock:job:123 unique-token NX EX 30
 GET lock:job:123
@@ -345,11 +380,12 @@ DEL lock:job:123
 ```
 
 **Simple Lock Implementation**:
+
 ```typescript
 async function acquireLock(key: string, ttl: number): Promise<string | null> {
   const token = crypto.randomUUID();
-  const result = await redis.set(key, token, 'NX', 'EX', ttl);
-  return result ? token : null;  // result is 'OK' or null
+  const result = await redis.set(key, token, "NX", "EX", ttl);
+  return result ? token : null; // result is 'OK' or null
 }
 
 async function releaseLock(key: string, token: string): Promise<boolean> {
@@ -363,12 +399,12 @@ async function releaseLock(key: string, token: string): Promise<boolean> {
 }
 
 // Usage
-const token = await acquireLock('lock:webhook:123', 30);
+const token = await acquireLock("lock:webhook:123", 30);
 if (token) {
   try {
     await processWebhook();
   } finally {
-    await releaseLock('lock:webhook:123', token);
+    await releaseLock("lock:webhook:123", token);
   }
 }
 ```
@@ -376,13 +412,16 @@ if (token) {
 ---
 
 ### Pattern 7: Session Storage (Phase 2)
+
 **What You'll Learn**:
+
 - Session persistence
 - TTL for automatic cleanup
 - Session invalidation on logout
 - Session data structure (what to store)
 
 **Real-World Use Cases**:
+
 ```
 - User authentication sessions
 - API token blacklisting
@@ -390,6 +429,7 @@ if (token) {
 ```
 
 **Key Commands**:
+
 ```redis
 SET session:uuid '{"userId":"123","roles":["admin"]}' EX 86400
 GET session:uuid
@@ -400,13 +440,16 @@ EXPIREAT session:uuid timestamp
 ---
 
 ### Pattern 8: Sorted Sets for Leaderboards & Metrics (Bonus)
+
 **What You'll Learn**:
+
 - Sorted sets for ranking
 - Score-based operations
 - Real-time calculations
 - Efficient range queries
 
 **Real-World Use Cases**:
+
 ```
 - Job processing leaderboards
 - Worker performance rankings
@@ -415,6 +458,7 @@ EXPIREAT session:uuid timestamp
 ```
 
 **Key Commands**:
+
 ```redis
 ZADD leaderboard 100 "worker-1"
 ZADD leaderboard 150 "worker-2"
@@ -428,13 +472,16 @@ ZINCRBY leaderboard 50 "worker-1"  # Increment
 ---
 
 ### Pattern 9: Pipelining for Performance (Optimization)
+
 **What You'll Learn**:
+
 - Batch Redis commands
 - Reduce round-trip latency
 - Transaction semantics
 - Performance gains (10-100x faster for bulk operations)
 
 **Key Commands**:
+
 ```redis
 MULTI
 SET key1 value1
@@ -444,10 +491,11 @@ EXEC
 ```
 
 **Implementation in TypeScript**:
+
 ```typescript
 // Without pipeline (slow)
 for (let i = 0; i < 1000; i++) {
-  await redis.set(`key:${i}`, `value${i}`);  // 1000 round trips
+  await redis.set(`key:${i}`, `value${i}`); // 1000 round trips
 }
 
 // With pipeline (fast)
@@ -455,13 +503,15 @@ const pipeline = redis.pipeline();
 for (let i = 0; i < 1000; i++) {
   pipeline.set(`key:${i}`, `value${i}`);
 }
-await pipeline.exec();  // 1 round trip
+await pipeline.exec(); // 1 round trip
 ```
 
 ---
 
 ### Pattern 10: Connection Pooling & Performance Tuning (Advanced)
+
 **What You'll Learn**:
+
 - Connection pool configuration
 - Maxmemory policies
 - Key eviction strategies
@@ -469,9 +519,10 @@ await pipeline.exec();  // 1 round trip
 - Monitoring Redis performance
 
 **Configuration**:
+
 ```javascript
 const redis = new Redis({
-  host: 'localhost',
+  host: "localhost",
   port: 6379,
   maxRetriesPerRequest: null,
   enableReadyCheck: false,
@@ -484,6 +535,7 @@ const redis = new Redis({
 ```
 
 **Monitoring Commands**:
+
 ```redis
 INFO memory  # Memory usage
 INFO stats   # Stats
@@ -496,22 +548,20 @@ MONITOR      # Live command stream
 
 ### Redis Patterns Summary Table
 
-| Pattern | Phase | Use Case | Trade-off |
-|---------|-------|----------|-----------|
-| **Queues (BullMQ)** | 3 | Reliable async jobs | Need worker infrastructure |
-| **Caching** | 6 | Reduce DB load | Invalidation complexity |
-| **Pub/Sub** | 5 | Real-time broadcasts | No persistence |
-| **Streams** | 9+ | Durable events | Slower than Pub/Sub |
-| **Rate Limiting** | 8 | Protect API | Redis dependency |
-| **Locks** | 11+ | Distributed coordination | Complexity, deadlock risk |
-| **Sessions** | 2 | Store auth state | Session size limits |
-| **Sorted Sets** | Bonus | Ranking/leaderboards | Memory for large datasets |
-| **Pipelining** | - | Batch operations | Less granular control |
-| **Connection Pool** | - | Performance | Configuration complexity |
+| Pattern             | Phase | Use Case                 | Trade-off                  |
+| ------------------- | ----- | ------------------------ | -------------------------- |
+| **Queues (BullMQ)** | 3     | Reliable async jobs      | Need worker infrastructure |
+| **Caching**         | 6     | Reduce DB load           | Invalidation complexity    |
+| **Pub/Sub**         | 5     | Real-time broadcasts     | No persistence             |
+| **Streams**         | 9+    | Durable events           | Slower than Pub/Sub        |
+| **Rate Limiting**   | 8     | Protect API              | Redis dependency           |
+| **Locks**           | 11+   | Distributed coordination | Complexity, deadlock risk  |
+| **Sessions**        | 2     | Store auth state         | Session size limits        |
+| **Sorted Sets**     | Bonus | Ranking/leaderboards     | Memory for large datasets  |
+| **Pipelining**      | -     | Batch operations         | Less granular control      |
+| **Connection Pool** | -     | Performance              | Configuration complexity   |
 
 ---
-
-
 
 ### 2.1 Primary Users
 
@@ -524,11 +574,13 @@ MONITOR      # Live command stream
 ### 2.2 Success Metrics
 
 **For Learning**:
+
 - Developer can explain all 12 core Redis patterns by end
 - Successfully deploys multi-worker system and scales it horizontally
 - Understands trade-offs between consistency, availability, and partition tolerance
 
 **For Project**:
+
 - 100+ GitHub stars by month 3 (community validation)
 - Clear, reproducible example that works out-of-the-box
 - Production-ready code quality (not just demo code)
@@ -596,6 +648,7 @@ A typical end-to-end flow:
 ### 4.1 Core Entities
 
 #### **Entity: Job**
+
 Primary entity representing a unit of work
 
 ```
@@ -603,36 +656,37 @@ Job {
   id: UUID
   type: "image-resize" | "video-transcode" | "ai-inference" | "email-send"
   userId: UUID (who submitted the job)
-  
+
   // Input data
   payload: JSON (job-specific input)
-  
+
   // Processing tracking
   status: PENDING | QUEUED | PROCESSING | COMPLETED | FAILED | CANCELLED
   createdAt: DateTime
   startedAt: DateTime?
   completedAt: DateTime?
-  
+
   // Results
   result: JSON? (output after completion)
   error: String? (error message if failed)
-  
+
   // Retry tracking
   attemptCount: Int (current attempt number)
   maxRetries: Int (default: 3)
   nextRetryAt: DateTime?
-  
+
   // Metadata
   priority: "low" | "normal" | "high" (default: normal)
   timeout: Int (seconds, default: 3600)
   webhookUrl: String? (notify on completion)
-  
+
   // Indexing
   indexes: [userId, status, createdAt, type]
 }
 ```
 
 **Key Design Decisions**:
+
 - `status` transitions: PENDING → QUEUED → PROCESSING → COMPLETED/FAILED
 - Once COMPLETED or FAILED, no further transitions
 - If FAILED and retries remaining: move back to QUEUED
@@ -640,19 +694,21 @@ Job {
 - `payload` and `result` are untyped JSON for flexibility across job types
 
 **State Transition Diagram**:
+
 ```
 PENDING → QUEUED → PROCESSING → COMPLETED ✓
                        ↓
                     FAILED (if maxRetries exceeded) ✓
                        ↓
                     QUEUED (if retries remain)
-                       
+
 At any point → CANCELLED ✓
 ```
 
 ---
 
 #### **Entity: Worker**
+
 Represents an active worker instance processing jobs
 
 ```
@@ -660,30 +716,31 @@ Worker {
   id: UUID
   instanceId: String (e.g., "worker-ai-1", "worker-image-2")
   type: "ai" | "image" | "video" | "email"
-  
+
   // Health tracking
   status: ACTIVE | IDLE | PAUSED | OFFLINE
   lastHeartbeat: DateTime
-  
+
   // Performance metrics
   jobsProcessed: Int (total in session)
   successCount: Int
   failureCount: Int
   totalProcessingTime: Int (seconds)
-  
+
   // Current job
   currentJobId: UUID?
   currentJobStartTime: DateTime?
-  
+
   createdAt: DateTime
   updatedAt: DateTime
-  
+
   // Indexing
   indexes: [type, status, lastHeartbeat]
 }
 ```
 
 **Purpose**:
+
 - Track which workers are alive (periodic heartbeat to Redis)
 - Monitor worker performance and health
 - Display in dashboard "3/5 image workers online"
@@ -691,18 +748,19 @@ Worker {
 ---
 
 #### **Entity: Event**
+
 Represents system events in the event log (optional but recommended)
 
 ```
 Event {
   id: UUID
-  eventType: "job.created" | "job.queued" | "job.started" | 
+  eventType: "job.created" | "job.queued" | "job.started" |
              "job.completed" | "job.failed" | "job.retried" |
              "worker.online" | "worker.offline"
-  
+
   jobId: UUID? (if job-related)
   workerId: UUID? (if worker-related)
-  
+
   payload: JSON (event-specific data)
   metadata: {
     timestamp: DateTime
@@ -710,15 +768,16 @@ Event {
     correlationId: String (for tracing)
     userId: UUID?
   }
-  
+
   createdAt: DateTime
-  
+
   // Indexing
   indexes: [jobId, eventType, createdAt]
 }
 ```
 
 **Purpose**:
+
 - Complete audit trail of what happened
 - Enables event sourcing pattern
 - Can replay events for debugging
@@ -736,6 +795,7 @@ Worker (processes) → Job
 ```
 
 **Key Relationships**:
+
 - One Job generates multiple Events (created, queued, started, completed)
 - One User submits many Jobs
 - One Worker processes many Jobs sequentially
@@ -758,17 +818,17 @@ Worker (processes) → Job
 
 ### 5.1 Technology Choices
 
-| Layer | Technology | Rationale |
-|-------|-----------|-----------|
-| **API Server** | NestJS + TypeScript | Production-grade, modular, built-in DI |
-| **Database** | PostgreSQL + Prisma ORM | Relational model fits job metadata well |
-| **Queue & Cache** | Redis + BullMQ | Industry standard, high performance |
-| **Event Streaming** | Redis Streams | Built into Redis, simple distributed log |
-| **Real-time** | Socket.IO + Redis Adapter | WebSockets with automatic clustering |
-| **Media Processing** | Sharp, FFmpeg | Industry standard libraries |
-| **Logging** | Pino + Loki | High-performance structured logging |
-| **Monitoring** | Prometheus + Grafana | Standard observability stack |
-| **Containerization** | Docker + Docker Compose | Local dev and demo deployment |
+| Layer                | Technology                | Rationale                                |
+| -------------------- | ------------------------- | ---------------------------------------- |
+| **API Server**       | NestJS + TypeScript       | Production-grade, modular, built-in DI   |
+| **Database**         | PostgreSQL + Prisma ORM   | Relational model fits job metadata well  |
+| **Queue & Cache**    | Redis + BullMQ            | Industry standard, high performance      |
+| **Event Streaming**  | Redis Streams             | Built into Redis, simple distributed log |
+| **Real-time**        | Socket.IO + Redis Adapter | WebSockets with automatic clustering     |
+| **Media Processing** | Sharp, FFmpeg             | Industry standard libraries              |
+| **Logging**          | Pino + Loki               | High-performance structured logging      |
+| **Monitoring**       | Prometheus + Grafana      | Standard observability stack             |
+| **Containerization** | Docker + Docker Compose   | Local dev and demo deployment            |
 
 ### 5.2 System Architecture
 
@@ -835,17 +895,17 @@ Worker (processes) → Job
 
 ### 5.3 Redis Usage Breakdown
 
-| Feature | Redis Structure | Use Case |
-|---------|-----------------|----------|
-| **Job Queue** | BullMQ (uses Streams under hood) | Queue and distribute jobs to workers |
-| **Cache** | Key-Value with TTL | Cache expensive API responses |
-| **Real-time Events** | Pub/Sub channels | Push job updates to connected clients |
-| **Progress Tracking** | Pub/Sub + simple KV | Long-running jobs publish progress |
-| **Worker Heartbeat** | Key-Value with TTL | Track if worker is alive |
-| **Rate Limiting** | Atomic INCR with TTL | Throttle job submissions per user |
-| **Session Storage** | Key-Value with TTL | Store user sessions (optional) |
-| **Distributed Lock** | SET NX with TTL | Prevent duplicate webhook calls |
-| **Event Stream** | Redis Streams | Durable event log (optional V2) |
+| Feature               | Redis Structure                  | Use Case                              |
+| --------------------- | -------------------------------- | ------------------------------------- |
+| **Job Queue**         | BullMQ (uses Streams under hood) | Queue and distribute jobs to workers  |
+| **Cache**             | Key-Value with TTL               | Cache expensive API responses         |
+| **Real-time Events**  | Pub/Sub channels                 | Push job updates to connected clients |
+| **Progress Tracking** | Pub/Sub + simple KV              | Long-running jobs publish progress    |
+| **Worker Heartbeat**  | Key-Value with TTL               | Track if worker is alive              |
+| **Rate Limiting**     | Atomic INCR with TTL             | Throttle job submissions per user     |
+| **Session Storage**   | Key-Value with TTL               | Store user sessions (optional)        |
+| **Distributed Lock**  | SET NX with TTL                  | Prevent duplicate webhook calls       |
+| **Event Stream**      | Redis Streams                    | Durable event log (optional V2)       |
 
 ### 5.4 Data Flow Examples
 
@@ -881,7 +941,7 @@ Worker (processes) → Job
 
 ```
 1. Worker starts long-running job (video transcode)
-2. Worker publishes to Redis pub/sub: "job:progress:{jobId}" 
+2. Worker publishes to Redis pub/sub: "job:progress:{jobId}"
    → { progress: 25, message: "Analyzing video..." }
 3. API receives and broadcasts to all connected WebSocket clients for this job
 4. Client receives: { progress: 25 } and updates UI progress bar
@@ -892,35 +952,46 @@ Worker (processes) → Job
 
 ## 6. MVP Feature Set (4-6 Week Timeline)
 
-### 6.1 Phase 1: Foundation (Week 1)
+### 6.1 Phase 1: Foundation (Week 1) ✅ COMPLETED
+
 **Goal**: Get the basic infrastructure working
 
 **Features**:
-- [ ] Docker Compose setup (API, PostgreSQL, Redis, Nginx)
-- [ ] NestJS project structure with proper modules
-- [ ] Database initialization and migrations
-- [ ] API health check endpoint
-- [ ] Basic error handling & logging setup
-- [ ] Environment configuration management
+
+- [x] Docker Compose setup (API, PostgreSQL, Redis, Nginx)
+- [x] NestJS project structure with proper modules
+- [x] Database initialization and migrations
+- [x] API health check endpoint
+- [x] Basic error handling & logging setup
+- [x] Environment configuration management
+- [x] Swagger API documentation (@nestjs/swagger)
+- [x] API README documentation
 
 **Deliverables**:
-- `docker-compose up` works end-to-end
-- All services (API, DB, Redis) are healthy
-- Logs flow to console properly
-- Health endpoint: `GET /health` → `{ status: "ok" }`
+
+- [x] `docker-compose up` works end-to-end
+- [x] All services (API, DB, Redis) are healthy
+- [x] Logs flow to console properly
+- [x] Health endpoint: `GET /api/health` → `{ status: "healthy", services: {...} }`
+- [x] Swagger UI available at `/api/docs`
+- [x] API documentation in `apps/api/README.md`
 
 **Learning**:
+
 - Docker multi-container networking
 - Service discovery patterns
 - Environment management
 - Modular project structure
+- Swagger/OpenAPI documentation setup
 
 ---
 
 ### 6.2 Phase 2: Authentication & Users (Week 1-2)
+
 **Goal**: Implement auth system to track job submissions
 
 **Features**:
+
 - [ ] User registration and login
 - [ ] JWT token generation
 - [ ] Refresh token mechanism
@@ -929,12 +1000,14 @@ Worker (processes) → Job
 - [ ] Session storage in Redis
 
 **Deliverables**:
+
 - Register: `POST /auth/register` → JWT token
 - Login: `POST /auth/login` → JWT token + refresh token
 - Protected endpoints require Authorization header
 - Tokens store user ID and expiration
 
 **Learning**:
+
 - Auth flow implementation
 - Redis TTL usage for sessions
 - JWT security best practices
@@ -943,9 +1016,11 @@ Worker (processes) → Job
 ---
 
 ### 6.3 Phase 3: Job Queue Basics (Week 2-3)
+
 **Goal**: Implement core job submission and queue system
 
 **Features**:
+
 - [ ] Job creation and storage (PostgreSQL)
 - [ ] Job enqueueing to Redis queue (BullMQ)
 - [ ] Job status tracking (PENDING → QUEUED → PROCESSING → COMPLETED/FAILED)
@@ -954,6 +1029,7 @@ Worker (processes) → Job
 - [ ] Job timeout handling
 
 **API Endpoints**:
+
 ```
 POST   /jobs                    # Submit new job
 GET    /jobs/{id}               # Get job by ID
@@ -962,12 +1038,14 @@ DELETE /jobs/{id}               # Cancel job (if not started)
 ```
 
 **Deliverables**:
+
 - Job entity in PostgreSQL
 - BullMQ queue setup and configuration
 - Job lifecycle management
 - Retry logic with exponential backoff
 
 **Learning**:
+
 - Producer/consumer pattern
 - Async job processing
 - Redis queue internals
@@ -976,9 +1054,11 @@ DELETE /jobs/{id}               # Cancel job (if not started)
 ---
 
 ### 6.4 Phase 4: Single Worker Type (Week 3)
+
 **Goal**: Build first worker to process jobs
 
 **Features**:
+
 - [ ] Image Worker service (separate Docker container)
 - [ ] Image processing jobs: resize, thumbnail, compress
 - [ ] Worker picks jobs from BullMQ queue
@@ -987,6 +1067,7 @@ DELETE /jobs/{id}               # Cancel job (if not started)
 - [ ] Worker health checks
 
 **Worker Jobs**:
+
 ```
 Job Type: "image-resize"
 Payload: { imageUrl: string, width: number, height: number }
@@ -1002,12 +1083,14 @@ Result: { compressedUrl: string, originalSize: number, newSize: number }
 ```
 
 **Deliverables**:
+
 - Worker Docker image that connects to Redis queue
 - Image processing using Sharp library
 - Proper error handling and logging
 - `docker-compose up --scale worker-image=3` works
 
 **Learning**:
+
 - Worker architecture
 - Long-running processes
 - CPU-bound task handling
@@ -1017,9 +1100,11 @@ Result: { compressedUrl: string, originalSize: number, newSize: number }
 ---
 
 ### 6.5 Phase 5: Real-time Updates via WebSocket (Week 3-4)
+
 **Goal**: Push job status updates to clients in real-time
 
 **Features**:
+
 - [ ] Socket.IO setup with Redis adapter
 - [ ] WebSocket connection authentication
 - [ ] Job status broadcast to interested clients
@@ -1027,6 +1112,7 @@ Result: { compressedUrl: string, originalSize: number, newSize: number }
 - [ ] Event channels for different job types
 
 **Behavior**:
+
 ```
 Client connects → Socket.IO authenticates with JWT
 Client subscribes: socket.on("job:progress:{jobId}", (data) => {...})
@@ -1035,12 +1121,14 @@ All connected clients for that job receive update immediately
 ```
 
 **Deliverables**:
+
 - Socket.IO server with Redis adapter
 - Real-time job status updates
 - Client can watch job progress without polling
 - Automatic cleanup when client disconnects
 
 **Learning**:
+
 - WebSocket architecture
 - Redis Pub/Sub for distributed messaging
 - Real-time event distribution
@@ -1049,9 +1137,11 @@ All connected clients for that job receive update immediately
 ---
 
 ### 6.6 Phase 6: Monitoring & Logging (Week 4)
+
 **Goal**: Observe what's happening in the system
 
 **Features**:
+
 - [ ] Structured logging (Pino) with correlation IDs
 - [ ] Prometheus metrics collection
 - [ ] Grafana dashboards
@@ -1064,6 +1154,7 @@ All connected clients for that job receive update immediately
 - [ ] Basic health check dashboard
 
 **Metrics to Track**:
+
 ```
 queue_size{queue="image"}           # Current jobs in queue
 job_processing_time_seconds         # Time to complete
@@ -1074,12 +1165,14 @@ redis_memory_bytes                  # Redis usage
 ```
 
 **Deliverables**:
+
 - Prometheus scraping API metrics
 - Grafana dashboard with key charts
 - Correlation IDs in logs for tracing
 - Health check endpoint returns detailed status
 
 **Learning**:
+
 - Observability fundamentals
 - Metrics collection and visualization
 - Distributed tracing concepts
@@ -1088,9 +1181,11 @@ redis_memory_bytes                  # Redis usage
 ---
 
 ### 6.7 Phase 7: Webhook Notifications (Week 4)
+
 **Goal**: Notify external systems when jobs complete
 
 **Features**:
+
 - [ ] Webhook URL in job payload
 - [ ] Webhook delivery on job completion
 - [ ] Retry logic for failed webhooks
@@ -1098,6 +1193,7 @@ redis_memory_bytes                  # Redis usage
 - [ ] Webhook delivery logging
 
 **Flow**:
+
 ```
 Client submits job with webhookUrl: "https://example.com/callback"
 Job completes
@@ -1109,11 +1205,13 @@ Response 5xx → Retry (exponential backoff, max 3 times)
 ```
 
 **Deliverables**:
+
 - Webhook delivery system with retry logic
 - Security: HMAC signature on webhook payload
 - Webhook delivery logs and status tracking
 
 **Learning**:
+
 - Reliable notification patterns
 - HMAC security
 - Callback mechanisms
@@ -1121,15 +1219,18 @@ Response 5xx → Retry (exponential backoff, max 3 times)
 ---
 
 ### 6.8 Phase 8: Rate Limiting
+
 **Goal**: Protect system from abuse
 
 **Features**:
+
 - [ ] User-based rate limiting (e.g., 100 jobs/hour)
 - [ ] IP-based rate limiting
 - [ ] Different limits for different job types
 - [ ] Clear error messages when rate limited
 
 **Implementation**:
+
 ```
 Redis Key: rate_limit:user:{userId}:image
 Value: count (number)
@@ -1138,11 +1239,13 @@ Logic: INCR key; if result > limit → reject
 ```
 
 **Deliverables**:
+
 - Rate limiting middleware
 - Configurable limits per job type
 - Clear 429 Too Many Requests responses
 
 **Learning**:
+
 - Distributed rate limiting
 - Atomic Redis operations (INCR)
 - API protection strategies
@@ -1180,17 +1283,17 @@ CREATE TABLE "user" (
   email VARCHAR(255) UNIQUE NOT NULL,
   name VARCHAR(255),
   passwordHash VARCHAR(255) NOT NULL,
-  
+
   -- API quota
   maxJobsPerHour INT DEFAULT 100,
   maxConcurrentJobs INT DEFAULT 10,
-  
+
   -- Status
   isActive BOOLEAN DEFAULT true,
-  
+
   createdAt TIMESTAMP DEFAULT NOW(),
   updatedAt TIMESTAMP DEFAULT NOW(),
-  
+
   INDEX(email),
   INDEX(createdAt)
 );
@@ -1199,46 +1302,46 @@ CREATE TABLE "user" (
 CREATE TABLE "job" (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   userId UUID NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
-  
+
   -- Job metadata
   type VARCHAR(50) NOT NULL,  -- "image-resize", "video-transcode", etc
   priority VARCHAR(20) DEFAULT 'normal',  -- low, normal, high
-  
+
   -- Input/Output
   payload JSONB NOT NULL,
   result JSONB,
-  
+
   -- Status tracking
   status VARCHAR(50) DEFAULT 'PENDING',  -- PENDING, QUEUED, PROCESSING, COMPLETED, FAILED, CANCELLED
-  
+
   -- Error details
   errorMessage TEXT,
   errorStack TEXT,
-  
+
   -- Retry tracking
   attemptCount INT DEFAULT 0,
   maxRetries INT DEFAULT 3,
   nextRetryAt TIMESTAMP,
-  
+
   -- Timing
   timeout INT DEFAULT 3600,  -- seconds
   startedAt TIMESTAMP,
   completedAt TIMESTAMP,
-  
+
   -- Webhook
   webhookUrl VARCHAR(500),
   webhookDeliveredAt TIMESTAMP,
   webhookRetryCount INT DEFAULT 0,
-  
+
   -- Metadata
   correlationId VARCHAR(255),
-  
+
   createdAt TIMESTAMP DEFAULT NOW(),
   updatedAt TIMESTAMP DEFAULT NOW(),
-  
+
   CONSTRAINT valid_status CHECK (status IN ('PENDING', 'QUEUED', 'PROCESSING', 'COMPLETED', 'FAILED', 'CANCELLED')),
   CONSTRAINT valid_priority CHECK (priority IN ('low', 'normal', 'high')),
-  
+
   INDEX(userId),
   INDEX(status),
   INDEX(type),
@@ -1250,28 +1353,28 @@ CREATE TABLE "job" (
 -- Workers table (for monitoring)
 CREATE TABLE "worker" (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  
+
   -- Identity
   instanceId VARCHAR(255) UNIQUE NOT NULL,  -- e.g., "worker-image-1"
   type VARCHAR(50) NOT NULL,  -- "image", "video", "ai", "email"
-  
+
   -- Health
   status VARCHAR(50) DEFAULT 'IDLE',  -- ACTIVE, IDLE, PAUSED, OFFLINE
   lastHeartbeat TIMESTAMP DEFAULT NOW(),
-  
+
   -- Stats
   jobsProcessed INT DEFAULT 0,
   successCount INT DEFAULT 0,
   failureCount INT DEFAULT 0,
   totalProcessingTimeMs BIGINT DEFAULT 0,
-  
+
   -- Current job
   currentJobId UUID REFERENCES "job"(id) ON DELETE SET NULL,
   currentJobStartTime TIMESTAMP,
-  
+
   createdAt TIMESTAMP DEFAULT NOW(),
   updatedAt TIMESTAMP DEFAULT NOW(),
-  
+
   INDEX(type),
   INDEX(status),
   INDEX(lastHeartbeat)
@@ -1280,19 +1383,19 @@ CREATE TABLE "worker" (
 -- Events table (for audit trail)
 CREATE TABLE "event" (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  
+
   -- Event metadata
   eventType VARCHAR(100) NOT NULL,  -- "job.created", "job.completed", etc
   jobId UUID REFERENCES "job"(id) ON DELETE CASCADE,
   workerId UUID REFERENCES "worker"(id) ON DELETE SET NULL,
-  
+
   -- Payload and context
   payload JSONB,
   correlationId VARCHAR(255),
   source VARCHAR(100),  -- which service
-  
+
   createdAt TIMESTAMP DEFAULT NOW(),
-  
+
   INDEX(jobId),
   INDEX(eventType),
   INDEX(createdAt)
@@ -1477,30 +1580,30 @@ Response 200: {
 
 ```javascript
 // Connect
-socket.on('connect', () => {
-  socket.emit('authenticate', { token: 'jwt-token' });
+socket.on("connect", () => {
+  socket.emit("authenticate", { token: "jwt-token" });
 });
 
 // Subscribe to job updates
-socket.emit('subscribe:job', { jobId: 'uuid' });
+socket.emit("subscribe:job", { jobId: "uuid" });
 
 // Receive job status updates
-socket.on('job:status', (data) => {
+socket.on("job:status", (data) => {
   console.log({ status, updatedAt });
 });
 
 // Receive progress updates
-socket.on('job:progress', (data) => {
-  console.log({ progress: 0-100, message: "..." });
+socket.on("job:progress", (data) => {
+  console.log({ progress: 0 - 100, message: "..." });
 });
 
 // Job completed
-socket.on('job:completed', (data) => {
+socket.on("job:completed", (data) => {
   console.log({ jobId, result });
 });
 
 // Job failed
-socket.on('job:failed', (data) => {
+socket.on("job:failed", (data) => {
   console.log({ jobId, errorMessage });
 });
 ```
@@ -1514,10 +1617,12 @@ socket.on('job:failed', (data) => {
 **Chosen**: NestJS + TypeScript
 
 **Alternatives Considered**:
+
 - Express: Too minimal, would build a lot of plumbing ourselves
 - Fastify: Great performance, but less ecosystem for enterprise patterns
 
 **Why NestJS**:
+
 - Built-in dependency injection (perfect for testing)
 - Module system (clear separation of concerns)
 - Decorators for cleaner code
@@ -1530,11 +1635,13 @@ socket.on('job:failed', (data) => {
 **Chosen**: PostgreSQL + Prisma ORM
 
 **Why not MongoDB**:
+
 - Job metadata has clear relational structure (user → jobs → events)
 - PostgreSQL is more mature for transactions and constraints
 - JSONB in PostgreSQL gives flexibility when needed
 
 **Why Prisma**:
+
 - Type-safe ORM (catches bugs at compile time)
 - Auto-generated migrations
 - Clear schema definition
@@ -1545,12 +1652,14 @@ socket.on('job:failed', (data) => {
 **Chosen**: BullMQ for queue management
 
 **Why not raw Redis**:
+
 - BullMQ handles job retry logic, exponential backoff, scheduling
 - Built-in monitoring and dashboards
 - Cleaner API than raw Redis commands
 - Handles edge cases (job timeouts, worker crashes, etc.)
 
 **Why BullMQ**:
+
 - Industry standard for Node.js job queues
 - Well-maintained and battle-tested
 - Good documentation and community
@@ -1560,6 +1669,7 @@ socket.on('job:failed', (data) => {
 **Current**: Using BullMQ (Streams under the hood)
 
 **Future (V2)**: Consider explicit event sourcing with Redis Streams
+
 - Provides complete audit trail
 - Enables event replay for debugging
 - Fits event-driven architecture mindset
@@ -1570,6 +1680,7 @@ socket.on('job:failed', (data) => {
 **Chosen**: Docker Compose for MVP
 
 **Why not Kubernetes immediately**:
+
 - K8s is complex to learn alongside everything else
 - Docker Compose is sufficient for learning core patterns
 - Can be migrated to K8s later (V2)
@@ -1646,18 +1757,21 @@ systemvibe/
 ### 11.2 NestJS API Modules
 
 **auth.module.ts**
+
 ```typescript
 // Responsible for: registration, login, token refresh, JWT validation
 // Exports: AuthService, AuthGuard
 ```
 
 **users.module.ts**
+
 ```typescript
 // Responsible for: user profile, settings, quota management
 // Depends on: auth, database
 ```
 
 **jobs.module.ts**
+
 ```typescript
 // Responsible for: job CRUD, job lifecycle, status updates
 // Depends on: auth, queue, database, logger
@@ -1665,6 +1779,7 @@ systemvibe/
 ```
 
 **queue.module.ts**
+
 ```typescript
 // Responsible for: BullMQ setup, queue configuration
 // Provides: QueueService to other modules
@@ -1672,24 +1787,28 @@ systemvibe/
 ```
 
 **workers.module.ts**
+
 ```typescript
 // Responsible for: monitoring workers, health checks
 // Depends on: database, redis
 ```
 
 **events.module.ts**
+
 ```typescript
 // Responsible for: event logging and audit trail
 // Depends on: database
 ```
 
 **webhooks.module.ts**
+
 ```typescript
 // Responsible for: webhook delivery, retry logic
 // Depends on: queue, jobs, logger
 ```
 
 **websocket.module.ts**
+
 ```typescript
 // Responsible for: Socket.IO setup, real-time updates
 // Depends on: auth, redis adapter, jobs
@@ -1703,30 +1822,35 @@ systemvibe/
 ### 12.1 Coding Standards
 
 **TypeScript**:
+
 ```typescript
 // ✅ DO: Use strict types
 interface CreateJobDto {
-  type: JobType;  // Not `string`
+  type: JobType; // Not `string`
   payload: Record<string, unknown>;
   webhookUrl?: string;
 }
 
 // ❌ DON'T: Use `any`
 interface Job {
-  payload: any;  // ❌ Avoid
+  payload: any; // ❌ Avoid
 }
 ```
 
 **Error Handling**:
+
 ```typescript
 // ✅ DO: Create custom exceptions
-throw new BadRequestException('Job type must be one of: image-resize, video-transcode');
+throw new BadRequestException(
+  "Job type must be one of: image-resize, video-transcode",
+);
 
 // ❌ DON'T: Throw raw errors
-throw new Error('Something went wrong');
+throw new Error("Something went wrong");
 ```
 
 **Naming Conventions**:
+
 ```
 - Files: kebab-case.ts (job.service.ts, job.controller.ts)
 - Classes: PascalCase (JobService, JobController)
@@ -1737,12 +1861,10 @@ throw new Error('Something went wrong');
 ```
 
 **Logging**:
+
 ```typescript
 // ✅ DO: Structured logging with context
-this.logger.info(
-  { jobId, workerId, durationMs },
-  'Job processing completed'
-);
+this.logger.info({ jobId, workerId, durationMs }, "Job processing completed");
 
 // ❌ DON'T: String concatenation
 this.logger.info(`Job ${jobId} completed in ${durationMs}ms`);
@@ -1751,6 +1873,7 @@ this.logger.info(`Job ${jobId} completed in ${durationMs}ms`);
 ### 12.2 Testing Strategy
 
 **Unit Tests**: Service logic
+
 ```typescript
 describe('JobService', () => {
   it('should create a job with PENDING status', async () => {
@@ -1764,13 +1887,14 @@ describe('JobService', () => {
 ```
 
 **Integration Tests**: Full flows (API → DB → Queue)
+
 ```typescript
-describe('Job Submission Flow', () => {
-  it('should enqueue job to Redis when API receives request', async () => {
+describe("Job Submission Flow", () => {
+  it("should enqueue job to Redis when API receives request", async () => {
     const response = await request(app.getHttpServer())
-      .post('/jobs')
+      .post("/jobs")
       .send(createJobDto);
-    
+
     expect(response.status).toBe(201);
     const queueSize = await queue.count();
     expect(queueSize).toBe(1);
@@ -1779,9 +1903,10 @@ describe('Job Submission Flow', () => {
 ```
 
 **E2E Tests**: Complete workflows
+
 ```typescript
-describe('End-to-End: Image Resize', () => {
-  it('should process image resize from submission to completion', async () => {
+describe("End-to-End: Image Resize", () => {
+  it("should process image resize from submission to completion", async () => {
     // 1. Submit job via API
     // 2. Wait for worker to process
     // 3. Verify job is COMPLETED
@@ -1795,33 +1920,33 @@ describe('End-to-End: Image Resize', () => {
 **Unit Tests: Individual Redis Operations**
 
 ```typescript
-describe('Redis Cache Pattern', () => {
-  it('should cache data with TTL', async () => {
-    const key = 'test:user:123';
-    const data = { id: 123, name: 'John' };
-    
+describe("Redis Cache Pattern", () => {
+  it("should cache data with TTL", async () => {
+    const key = "test:user:123";
+    const data = { id: 123, name: "John" };
+
     // Set with 1 second TTL
-    await redis.set(key, JSON.stringify(data), 'EX', 1);
-    
+    await redis.set(key, JSON.stringify(data), "EX", 1);
+
     // Verify it exists
     let cached = await redis.get(key);
     expect(cached).toBe(JSON.stringify(data));
-    
+
     // Wait for expiration
-    await new Promise(resolve => setTimeout(resolve, 1100));
-    
+    await new Promise((resolve) => setTimeout(resolve, 1100));
+
     // Verify it's gone
     cached = await redis.get(key);
     expect(cached).toBeNull();
   });
 
-  it('should invalidate cache on update', async () => {
-    const key = 'test:user:456';
-    
+  it("should invalidate cache on update", async () => {
+    const key = "test:user:456";
+
     // Set initial cache
-    await redis.set(key, 'initial');
-    expect(await redis.get(key)).toBe('initial');
-    
+    await redis.set(key, "initial");
+    expect(await redis.get(key)).toBe("initial");
+
     // Invalidate
     await redis.del(key);
     expect(await redis.get(key)).toBeNull();
@@ -1832,45 +1957,49 @@ describe('Redis Cache Pattern', () => {
 **Integration Tests: Redis Pattern Interactions**
 
 ```typescript
-describe('Job Queue Pattern', () => {
-  it('should process jobs FIFO order', async () => {
+describe("Job Queue Pattern", () => {
+  it("should process jobs FIFO order", async () => {
     // Add 3 jobs
-    await queue.add('job1', { id: 1 });
-    await queue.add('job2', { id: 2 });
-    await queue.add('job3', { id: 3 });
-    
+    await queue.add("job1", { id: 1 });
+    await queue.add("job2", { id: 2 });
+    await queue.add("job3", { id: 3 });
+
     const processed: number[] = [];
-    
+
     // Process all jobs
     await queue.process(async (job) => {
       processed.push(job.data.id);
     });
-    
+
     // Wait for completion
-    await new Promise(resolve => queue.once('drained', resolve));
-    
+    await new Promise((resolve) => queue.once("drained", resolve));
+
     // Verify FIFO
     expect(processed).toEqual([1, 2, 3]);
   });
 
-  it('should retry failed jobs with exponential backoff', async () => {
+  it("should retry failed jobs with exponential backoff", async () => {
     let attemptCount = 0;
-    
-    await queue.add('failing-job', {}, { 
-      attempts: 3,
-      backoff: { type: 'exponential', delay: 100 }
-    });
-    
+
+    await queue.add(
+      "failing-job",
+      {},
+      {
+        attempts: 3,
+        backoff: { type: "exponential", delay: 100 },
+      },
+    );
+
     await queue.process(async (job) => {
       attemptCount++;
       if (attemptCount < 3) {
-        throw new Error('Simulated failure');
+        throw new Error("Simulated failure");
       }
       return { success: true };
     });
-    
-    await new Promise(resolve => queue.once('drained', resolve));
-    
+
+    await new Promise((resolve) => queue.once("drained", resolve));
+
     expect(attemptCount).toBe(3);
   });
 });
@@ -1879,36 +2008,36 @@ describe('Job Queue Pattern', () => {
 **Rate Limiting Tests**
 
 ```typescript
-describe('Distributed Rate Limiting', () => {
-  it('should block requests exceeding rate limit', async () => {
-    const userId = 'user:test-rate-limit';
+describe("Distributed Rate Limiting", () => {
+  it("should block requests exceeding rate limit", async () => {
+    const userId = "user:test-rate-limit";
     const limit = 5;
-    
+
     // Make 5 requests (should all succeed)
     for (let i = 0; i < 5; i++) {
       const isLimited = await rateLimiter.isLimited(userId, limit, 3600);
       expect(isLimited).toBe(false);
     }
-    
+
     // 6th request should fail
     const isLimited = await rateLimiter.isLimited(userId, limit, 3600);
     expect(isLimited).toBe(true);
   });
 
-  it('should reset limits after time window', async () => {
-    const userId = 'user:test-reset';
+  it("should reset limits after time window", async () => {
+    const userId = "user:test-reset";
     const limit = 2;
     const windowSeconds = 1;
-    
+
     // Exceed limit
     await rateLimiter.isLimited(userId, limit, windowSeconds);
     await rateLimiter.isLimited(userId, limit, windowSeconds);
     let isLimited = await rateLimiter.isLimited(userId, limit, windowSeconds);
     expect(isLimited).toBe(true);
-    
+
     // Wait for window to expire
-    await new Promise(r => setTimeout(r, windowSeconds * 1000 + 100));
-    
+    await new Promise((r) => setTimeout(r, windowSeconds * 1000 + 100));
+
     // Should be allowed again
     isLimited = await rateLimiter.isLimited(userId, limit, windowSeconds);
     expect(isLimited).toBe(false);
@@ -1919,37 +2048,37 @@ describe('Distributed Rate Limiting', () => {
 **Pub/Sub Tests**
 
 ```typescript
-describe('Real-Time Pub/Sub Pattern', () => {
-  it('should broadcast to multiple subscribers', async () => {
+describe("Real-Time Pub/Sub Pattern", () => {
+  it("should broadcast to multiple subscribers", async () => {
     const messages1: string[] = [];
     const messages2: string[] = [];
-    
+
     // Subscriber 1
     const sub1 = redis.duplicate();
-    sub1.subscribe('job:updates', (message) => {
+    sub1.subscribe("job:updates", (message) => {
       messages1.push(message);
     });
-    
+
     // Subscriber 2
     const sub2 = redis.duplicate();
-    sub2.subscribe('job:updates', (message) => {
+    sub2.subscribe("job:updates", (message) => {
       messages2.push(message);
     });
-    
+
     // Wait for subscriptions to be ready
-    await new Promise(r => setTimeout(r, 100));
-    
+    await new Promise((r) => setTimeout(r, 100));
+
     // Publish
-    await redis.publish('job:updates', 'Update 1');
-    await redis.publish('job:updates', 'Update 2');
-    
+    await redis.publish("job:updates", "Update 1");
+    await redis.publish("job:updates", "Update 2");
+
     // Wait for delivery
-    await new Promise(r => setTimeout(r, 100));
-    
+    await new Promise((r) => setTimeout(r, 100));
+
     // Both subscribers should receive
-    expect(messages1).toEqual(['Update 1', 'Update 2']);
-    expect(messages2).toEqual(['Update 1', 'Update 2']);
-    
+    expect(messages1).toEqual(["Update 1", "Update 2"]);
+    expect(messages2).toEqual(["Update 1", "Update 2"]);
+
     // Cleanup
     await sub1.unsubscribe();
     await sub2.unsubscribe();
@@ -1960,20 +2089,20 @@ describe('Real-Time Pub/Sub Pattern', () => {
 **Distributed Lock Tests**
 
 ```typescript
-describe('Distributed Lock Pattern', () => {
-  it('should prevent concurrent execution', async () => {
-    const lockKey = 'test:lock';
+describe("Distributed Lock Pattern", () => {
+  it("should prevent concurrent execution", async () => {
+    const lockKey = "test:lock";
     const results: string[] = [];
-    
+
     const tryExecute = async (name: string) => {
       const token = crypto.randomUUID();
-      const acquired = await redis.set(lockKey, token, 'NX', 'EX', 5);
-      
-      if (!acquired) return false;  // Couldn't acquire
-      
+      const acquired = await redis.set(lockKey, token, "NX", "EX", 5);
+
+      if (!acquired) return false; // Couldn't acquire
+
       try {
         results.push(`${name}:start`);
-        await new Promise(r => setTimeout(r, 100));
+        await new Promise((r) => setTimeout(r, 100));
         results.push(`${name}:end`);
         return true;
       } finally {
@@ -1982,19 +2111,19 @@ describe('Distributed Lock Pattern', () => {
         if (current === token) await redis.del(lockKey);
       }
     };
-    
+
     // Both try to execute
     const [result1, result2] = await Promise.all([
-      tryExecute('task1'),
-      tryExecute('task2')
+      tryExecute("task1"),
+      tryExecute("task2"),
     ]);
-    
+
     // Only one should succeed
     expect(result1 || result2).toBe(true);
     expect(result1 && result2).toBe(false);
-    
+
     // Should not interleave
-    const startEnds = results.filter(r => r.includes('end'));
+    const startEnds = results.filter((r) => r.includes("end"));
     expect(startEnds.length).toBe(1);
   });
 });
@@ -2003,41 +2132,41 @@ describe('Distributed Lock Pattern', () => {
 **Performance/Load Tests**
 
 ```typescript
-describe('Redis Performance Tests', () => {
-  it('should handle high throughput cache operations', async () => {
+describe("Redis Performance Tests", () => {
+  it("should handle high throughput cache operations", async () => {
     const iterations = 10000;
     const start = Date.now();
-    
+
     // Simulate cache reads
     for (let i = 0; i < iterations; i++) {
       const key = `perf:test:${i % 100}`;
-      await redis.get(key);  // Most will miss, that's fine
+      await redis.get(key); // Most will miss, that's fine
     }
-    
+
     const duration = Date.now() - start;
-    const opsPerSecond = (iterations / (duration / 1000));
-    
+    const opsPerSecond = iterations / (duration / 1000);
+
     console.log(`${opsPerSecond.toFixed(0)} ops/sec`);
-    
+
     // Redis should easily handle 100k+ ops/sec
     expect(opsPerSecond).toBeGreaterThan(50000);
   });
 
-  it('should handle concurrent queue submissions', async () => {
+  it("should handle concurrent queue submissions", async () => {
     const jobCount = 1000;
     const start = Date.now();
-    
+
     // Submit 1000 jobs concurrently
     const promises = [];
     for (let i = 0; i < jobCount; i++) {
       promises.push(queue.add(`job-${i}`, { index: i }));
     }
-    
+
     await Promise.all(promises);
-    
+
     const duration = Date.now() - start;
     console.log(`Submitted ${jobCount} jobs in ${duration}ms`);
-    
+
     const queueSize = await queue.count();
     expect(queueSize).toBe(jobCount);
   });
@@ -2047,6 +2176,7 @@ describe('Redis Performance Tests', () => {
 ---
 
 **Branch Naming**:
+
 ```
 feature/job-retry-logic
 bugfix/worker-heartbeat-timeout
@@ -2056,6 +2186,7 @@ docs/api-documentation
 ```
 
 **Commit Messages**:
+
 ```
 feat: Add exponential backoff for job retries
 fix: Handle Redis connection timeout gracefully
@@ -2065,6 +2196,7 @@ refactor: Extract queue configuration to shared package
 ```
 
 **PR Process**:
+
 1. Create feature branch from `main`
 2. Make changes with tests
 3. Push and open PR
@@ -2073,6 +2205,7 @@ refactor: Extract queue configuration to shared package
 6. Squash and merge to `main`
 
 **Pre-commit Checklist**:
+
 - [ ] TypeScript compiles without errors: `npm run build`
 - [ ] Tests pass: `npm run test`
 - [ ] Linting passes: `npm run lint`
@@ -2094,6 +2227,7 @@ As you build SystemVibe, you'll encounter Redis issues. Here's how to debug and 
 **Symptoms**: Jobs added but workers don't process them
 
 **Debugging Steps**:
+
 ```bash
 # 1. Check if queue exists and has jobs
 redis-cli
@@ -2111,29 +2245,31 @@ redis-cli
 ```
 
 **Common Causes**:
+
 - Worker not connected to Redis
 - Worker crashed without cleanup
 - Job type mismatch (queue expects type X, worker handles Y)
 - Worker filter not matching job type
 
 **Solution**:
+
 ```typescript
 // Ensure worker is subscribed to correct queue type
-const processor = new Worker('image', {
+const processor = new Worker("image", {
   connection: redisConnection,
 });
 
 // Add event listeners for debugging
-processor.on('failed', (job, err) => {
-  logger.error({ jobId: job.id, error: err.message }, 'Job failed');
+processor.on("failed", (job, err) => {
+  logger.error({ jobId: job.id, error: err.message }, "Job failed");
 });
 
-processor.on('error', (err) => {
-  logger.error({ error: err.message }, 'Worker error');
+processor.on("error", (err) => {
+  logger.error({ error: err.message }, "Worker error");
 });
 
-processor.on('progress', (job, progress) => {
-  logger.info({ jobId: job.id, progress }, 'Progress update');
+processor.on("progress", (job, progress) => {
+  logger.info({ jobId: job.id, progress }, "Progress update");
 });
 ```
 
@@ -2144,6 +2280,7 @@ processor.on('progress', (job, progress) => {
 **Symptoms**: `INFO memory` shows used_memory continuously increasing
 
 **Debugging Steps**:
+
 ```bash
 redis-cli
 > INFO memory
@@ -2163,12 +2300,14 @@ redis-cli
 ```
 
 **Common Causes**:
+
 - Cache TTLs not set (keys never expire)
 - Large objects stored in cache
 - Memory leak in application (allocating without cleanup)
 - Publish-subscribe subscribers leaking
 
 **Solution**:
+
 ```typescript
 // ✅ Always set TTL on cache keys
 await redis.set(
@@ -2195,6 +2334,7 @@ redis-cli CONFIG SET maxmemory-policy allkeys-lru  // LRU eviction
 **Symptoms**: API requests to Redis are slow, WebSocket updates lag
 
 **Debugging Steps**:
+
 ```bash
 redis-cli
 > SLOWLOG GET 10  # Last 10 slow commands
@@ -2212,23 +2352,25 @@ redis-cli
 ```
 
 **Common Causes**:
-- O(N) command on large data (KEYS *, SCAN on huge dataset)
+
+- O(N) command on large data (KEYS \*, SCAN on huge dataset)
 - Memory pressure (Redis swapping to disk)
 - Network latency (Redis client → Redis server)
 - Single-threaded bottleneck (too many commands)
 
 **Solution**:
+
 ```typescript
 // ❌ DON'T: Use KEYS pattern
-const keys = await redis.keys('cache:*');  // Dangerous on large DB!
+const keys = await redis.keys("cache:*"); // Dangerous on large DB!
 
 // ✅ DO: Use SCAN (non-blocking)
-const cursor = '0';
+const cursor = "0";
 const keys = [];
 do {
-  const [newCursor, batch] = await redis.scan(cursor, 'MATCH', 'cache:*');
+  const [newCursor, batch] = await redis.scan(cursor, "MATCH", "cache:*");
   keys.push(...batch);
-} while (cursor !== '0');
+} while (cursor !== "0");
 
 // ✅ Use pipelining for batch operations
 const pipeline = redis.pipeline();
@@ -2245,6 +2387,7 @@ const results = await pipeline.exec();
 **Symptoms**: "ECONNREFUSED" errors, timeouts, requests queuing up
 
 **Debugging Steps**:
+
 ```typescript
 // Monitor connection pool
 logger.info({
@@ -2258,36 +2401,37 @@ netstat -an | grep 6379  # Count connections
 ```
 
 **Solution**:
+
 ```typescript
 const redis = new Redis({
-  host: 'localhost',
+  host: "localhost",
   port: 6379,
-  
+
   // Tune connection pool
-  maxRetriesPerRequest: 10,  // Retry failed commands
-  lazyConnect: false,         // Connect immediately
-  
+  maxRetriesPerRequest: 10, // Retry failed commands
+  lazyConnect: false, // Connect immediately
+
   // Retry strategy for timeouts
   retryStrategy: (times) => {
     const delay = Math.min(times * 50, 2000);
     return delay;
   },
-  
+
   // Connection limits
-  connectionPoolSize: 100,  // More connections
-  
+  connectionPoolSize: 100, // More connections
+
   // Timeouts
-  connectTimeout: 10000,    // Initial connection
-  commandTimeout: 5000,     // Per command
+  connectTimeout: 10000, // Initial connection
+  commandTimeout: 5000, // Per command
 });
 
 // Monitor and alert
-redis.on('error', (err) => {
-  logger.error({ error: err.message }, 'Redis connection error');
+redis.on("error", (err) => {
+  logger.error({ error: err.message }, "Redis connection error");
 });
 
-redis.on('warning', (msg) => {
-  logger.warn({ message: msg }, 'Redis warning');
+redis.on("warning", (msg) => {
+  logger.warn({ message: msg }, "Redis warning");
 });
 ```
 
@@ -2298,47 +2442,48 @@ redis.on('warning', (msg) => {
 **Symptoms**: Wrong data, duplicate processing, lost updates
 
 **Debugging Steps**:
+
 ```typescript
 // Add correlation IDs to trace requests through system
 const correlationId = randomUUID();
-logger.info({ correlationId, jobId }, 'Starting job');
+logger.info({ correlationId, jobId }, "Starting job");
 
 // Use transactions for atomic operations
-const result = await redis
-  .multi()
-  .set('key1', 'value1')
-  .incr('counter')
-  .exec();  // Both execute or both fail
+const result = await redis.multi().set("key1", "value1").incr("counter").exec(); // Both execute or both fail
 ```
 
 **Solution**:
+
 ```typescript
 // ✅ Use WATCH for optimistic locking
 const transaction = async (jobId) => {
   await redis.watch(`job:${jobId}`);
-  
+
   const current = await redis.get(`job:${jobId}`);
-  
+
   // Start transaction
   const pipe = redis.multi();
-  pipe.set(`job:${jobId}`, JSON.stringify({
-    ...current,
-    status: 'PROCESSING'
-  }));
-  
+  pipe.set(
+    `job:${jobId}`,
+    JSON.stringify({
+      ...current,
+      status: "PROCESSING",
+    }),
+  );
+
   try {
     await pipe.exec();
   } catch (err) {
     // Key was modified, retry
-    logger.warn({ jobId }, 'Transaction conflict, retrying');
+    logger.warn({ jobId }, "Transaction conflict, retrying");
     return transaction(jobId);
   }
 };
 
 // ✅ Use SET NX for atomic operations
 const acquireLock = async (key, ttl) => {
-  const result = await redis.set(key, '1', 'NX', 'EX', ttl);
-  return result === 'OK';
+  const result = await redis.set(key, "1", "NX", "EX", ttl);
+  return result === "OK";
 };
 
 // ✅ Use Lua scripts for complex atomic operations
@@ -2349,7 +2494,7 @@ else
   return 0
 end
 `;
-const result = await redis.eval(lua, 1, 'lock:key', 'token');
+const result = await redis.eval(lua, 1, "lock:key", "token");
 ```
 
 ---
@@ -2357,18 +2502,21 @@ const result = await redis.eval(lua, 1, 'lock:key', 'token');
 ### Redis Monitoring Checklist
 
 **Daily**:
+
 - [ ] Check memory usage trend
 - [ ] Review error rates
 - [ ] Check SLOWLOG for regressions
 - [ ] Verify no stuck workers
 
 **Weekly**:
+
 - [ ] Analyze key distribution (hot keys?)
 - [ ] Review expiration rates
 - [ ] Check connection pool health
 - [ ] Review backup status
 
 **Monthly**:
+
 - [ ] Capacity planning (growing?)
 - [ ] Update Redis version (security patches)
 - [ ] Review and optimize slow queries
@@ -2393,25 +2541,23 @@ Before deploying to production:
 
 ---
 
-
-
 ### 13.1 Docker Compose Stack
 
 ```yaml
 services:
-  nginx:                    # Reverse proxy, handles load balancing
-  api:                      # NestJS API server (1 instance)
-  postgres:                 # PostgreSQL database
-  redis:                    # Redis cache & queue
-  
-  worker-image:             # Image processing (scalable: 1-10)
-  worker-video:             # Video processing (scalable: 1-5)
-  worker-ai:                # AI inference (scalable: 1-3)
-  worker-email:             # Email delivery (scalable: 1-2)
-  
-  prometheus:               # Metrics collection
-  grafana:                  # Metrics visualization
-  loki:                     # Log aggregation
+  nginx: # Reverse proxy, handles load balancing
+  api: # NestJS API server (1 instance)
+  postgres: # PostgreSQL database
+  redis: # Redis cache & queue
+
+  worker-image: # Image processing (scalable: 1-10)
+  worker-video: # Video processing (scalable: 1-5)
+  worker-ai: # AI inference (scalable: 1-3)
+  worker-email: # Email delivery (scalable: 1-2)
+
+  prometheus: # Metrics collection
+  grafana: # Metrics visualization
+  loki: # Log aggregation
 ```
 
 ### 13.2 Scaling Example
@@ -2457,6 +2603,7 @@ ENABLE_MONITORING=true
 ### 14.1 Key Metrics
 
 **Queue Metrics**:
+
 ```
 systemvibe_queue_size{queue="image"}          # Jobs waiting
 systemvibe_queue_processing{queue="image"}    # Jobs being processed
@@ -2464,6 +2611,7 @@ systemvibe_job_duration_seconds{type="image"} # Time to completion
 ```
 
 **Job Metrics**:
+
 ```
 systemvibe_job_completed_total{type="image",status="success"}   # Completed jobs
 systemvibe_job_failed_total{type="image"}                       # Failed jobs
@@ -2472,6 +2620,7 @@ systemvibe_job_timeout_total{type="image"}                      # Timeout jobs
 ```
 
 **Worker Metrics**:
+
 ```
 systemvibe_worker_online{type="image"}                  # Online workers
 systemvibe_worker_processing_jobs{type="image"}         # Current load
@@ -2479,6 +2628,7 @@ systemvibe_worker_uptime_seconds{workerId="worker-1"}   # Worker uptime
 ```
 
 **System Metrics**:
+
 ```
 systemvibe_redis_memory_bytes        # Redis memory usage
 systemvibe_postgres_connections      # DB connection pool
@@ -2488,6 +2638,7 @@ systemvibe_api_request_duration      # API latency
 ### 14.2 Grafana Dashboards
 
 **Dashboard 1: System Overview**
+
 - Queue depths per type
 - Job success rate
 - Worker online status
@@ -2495,18 +2646,21 @@ systemvibe_api_request_duration      # API latency
 - API latency
 
 **Dashboard 2: Job Processing**
+
 - Job lifecycle visualization
 - Failure rate per job type
 - Retry distribution
 - Processing time trends
 
 **Dashboard 3: Worker Health**
+
 - Worker count per type
 - Processing rate per worker
 - Error rate per worker
 - Resource usage per worker
 
 **Dashboard 4: Real-time Events**
+
 - Live job events (created, completed, failed)
 - Active WebSocket connections
 - Webhook delivery status
@@ -2514,6 +2668,7 @@ systemvibe_api_request_duration      # API latency
 ### 14.3 Logging
 
 **Structured Logging Example**:
+
 ```typescript
 // When job starts
 logger.info(
@@ -2521,9 +2676,9 @@ logger.info(
     jobId: job.id,
     type: job.type,
     userId: job.userId,
-    correlationId: job.correlationId
+    correlationId: job.correlationId,
   },
-  'Job processing started'
+  "Job processing started",
 );
 
 // When job completes
@@ -2531,9 +2686,9 @@ logger.info(
   {
     jobId: job.id,
     durationMs: Date.now() - startTime,
-    correlationId: job.correlationId
+    correlationId: job.correlationId,
   },
-  'Job processing completed'
+  "Job processing completed",
 );
 
 // When job fails
@@ -2542,13 +2697,14 @@ logger.error(
     jobId: job.id,
     error: err.message,
     stack: err.stack,
-    correlationId: job.correlationId
+    correlationId: job.correlationId,
   },
-  'Job processing failed'
+  "Job processing failed",
 );
 ```
 
 **Log Aggregation**: Loki stores logs indexed by labels
+
 ```
 {jobId="uuid", type="image-resize", status="FAILED"}
 → Find all failed image jobs
@@ -2560,6 +2716,7 @@ logger.error(
 ## 15. Development Roadmap
 
 ### Phase 1 (Week 1): Foundation ✅
+
 - [x] Docker Compose setup
 - [x] NestJS project scaffolding
 - [x] Database schema
@@ -2567,39 +2724,46 @@ logger.error(
 - [x] Logging configuration
 
 ### Phase 2 (Week 1-2): Auth ✅
+
 - [x] User registration/login
 - [x] JWT tokens
 - [x] Auth guards
 
 ### Phase 3 (Week 2-3): Job Queue ✅
+
 - [x] Job CRUD API
 - [x] BullMQ queue integration
 - [x] Job retry logic
 - [x] Status tracking
 
 ### Phase 4 (Week 3): Image Worker ✅
+
 - [x] Image worker service
 - [x] Sharp integration
 - [x] Job processing loop
 - [x] Error handling
 
 ### Phase 5 (Week 3-4): Real-time ✅
+
 - [x] Socket.IO setup
 - [x] Job status broadcasts
 - [x] Progress updates
 
 ### Phase 6 (Week 4): Monitoring ✅
+
 - [x] Prometheus metrics
 - [x] Grafana dashboards
 - [x] Health checks
 - [x] Structured logging
 
 ### Phase 7 (Week 4): Webhooks ✅
+
 - [x] Webhook delivery
 - [x] Retry logic
 - [x] HMAC signatures
 
 ### Phase 8 (Week 4): Rate Limiting ✅
+
 - [x] User-based limiting
 - [x] IP-based limiting
 
@@ -2608,6 +2772,7 @@ logger.error(
 ## 16. Launch Checklist
 
 ### Development Complete
+
 - [ ] All MVP features implemented
 - [ ] TypeScript strict mode passing
 - [ ] ESLint & Prettier clean
@@ -2616,12 +2781,14 @@ logger.error(
 - [ ] E2E tests for critical flows passing
 
 ### QA & Testing
+
 - [ ] Manual testing of key flows completed
 - [ ] Performance testing done (latency, throughput)
 - [ ] Load testing completed (can handle 1000 jobs/minute)
 - [ ] Security review done (no secrets in code, rate limiting works)
 
 ### DevOps & Infrastructure
+
 - [ ] Docker images build successfully
 - [ ] Docker Compose brings up full stack
 - [ ] All services healthchecks passing
@@ -2629,6 +2796,7 @@ logger.error(
 - [ ] Logging configured and tested
 
 ### Documentation
+
 - [ ] README.md with setup instructions
 - [ ] ARCHITECTURE.md with diagrams
 - [ ] API.md with endpoint documentation
@@ -2637,6 +2805,7 @@ logger.error(
 - [ ] CHANGELOG.md created
 
 ### GitHub & Publishing
+
 - [ ] GitHub repo created and public
 - [ ] Code pushed to main branch
 - [ ] GitHub Actions CI/CD configured
@@ -2649,21 +2818,25 @@ logger.error(
 ## 17. Resources & Learning Materials
 
 ### Official Docs
+
 - [NestJS Docs](https://docs.nestjs.com)
 - [BullMQ Docs](https://docs.bullmq.io)
 - [Redis Docs](https://redis.io/documentation)
 - [Prisma Docs](https://www.prisma.io/docs)
 
 ### Articles & Guides
+
 - Redis Patterns: https://redis.io/docs/manual/patterns/
 - Event-Driven Architecture: https://martinfowler.com/articles/201701-event-driven.html
 - Distributed Systems Primer: https://github.com/aphyr/distsys-class
 
 ### Books
+
 - "Designing Data-Intensive Applications" by Martin Kleppmann
 - "The Art of Scalability" by Martin Abbott & Michael Fisher
 
 ### Related Open-Source Projects
+
 - [Bullmq Dashboard](https://github.com/felixbr/bull-board)
 - [EventMesh](https://github.com/apache/eventmesh) (the inspiration for this project!)
 

@@ -109,7 +109,196 @@ system-vibe/
 └── package.json             # Root package.json
 ```
 
-## Environment Variables
+### Why This Structure?
+
+This project uses a **monorepo architecture** with three main directories: `apps/`, `packages/`, and `infra/`. This separation is intentional and follows best practices for building scalable, maintainable distributed systems.
+
+---
+
+#### **1. apps/ - Deployable Applications**
+
+**Purpose**: Contains independent, deployable applications that can run as separate services.
+
+**Current**: `apps/api/` - The main NestJS API server
+
+**Future additions**:
+
+- `apps/worker/` - Background job processing workers
+- `apps/webhook/` - Webhook delivery service
+- `apps/scheduler/` - Cron job scheduler
+
+**Why separate apps?**
+
+- **Independent Deployment**: Each app can be deployed, scaled, and updated independently
+- **Clear Boundaries**: Each app has a single responsibility (API handles HTTP, workers process jobs)
+- **Horizontal Scaling**: Run multiple instances of API server or workers based on load
+- **Technology Flexibility**: Different apps could use different frameworks if needed (though we standardize on NestJS)
+- **Isolation**: If one app crashes, others continue running
+
+**Example**:
+
+```bash
+# Scale API to handle more HTTP requests
+docker compose up --scale api=3
+
+# Scale workers to process more jobs
+docker compose up --scale worker=5
+```
+
+---
+
+#### **2. packages/ - Shared Code Libraries**
+
+**Purpose**: Contains reusable code that multiple applications depend on. This is the key to avoiding code duplication.
+
+**Current packages**:
+
+- `packages/database/` - Prisma ORM client and schema
+- `packages/redis/` - Redis connection utilities (to be implemented)
+- `packages/shared/` - Common types, interfaces, utilities (to be implemented)
+
+**Why separate packages?**
+
+**A. Code Reuse Across Apps**
+
+```
+Without packages:
+├── apps/api/src/database/client.ts      (Duplicate code)
+├── apps/worker/src/database/client.ts  (Duplicate code)
+└── apps/webhook/src/database/client.ts  (Duplicate code)
+
+With packages:
+├── packages/database/                   (Single source of truth)
+    └── prisma client
+├── apps/api/           → imports from @systemvibe/database
+├── apps/worker/        → imports from @systemvibe/database
+└── apps/webhook/       → imports from @systemvibe/database
+```
+
+**B. Single Source of Truth for Database Schema**
+
+- Database schema defined once in `packages/database/prisma/schema.prisma`
+- All apps use the same Prisma client
+- Schema changes propagate automatically to all apps
+- No risk of schema drift between services
+
+**C. Type Safety Across Services**
+
+```typescript
+// packages/database/prisma/schema.prisma
+model Job {
+  id     String @id @default(uuid())
+  status String
+  payload Json
+}
+
+// Auto-generated TypeScript types
+// All apps get the same Job type definition
+```
+
+**D. Independent Versioning**
+
+- Can update database schema without redeploying all apps
+- Can add new Redis utilities without affecting API
+- Each package has its own version and dependencies
+
+**E. Testing Isolation**
+
+- Test database logic independently without running API server
+- Test Redis utilities in isolation
+- Unit tests are faster and more focused
+
+**F. Circular Dependency Prevention**
+
+- If database code lived in API, API might need to import from database later
+- Separation prevents circular dependencies between packages
+
+---
+
+#### **3. infra/ - Infrastructure Configuration**
+
+**Purpose**: Contains infrastructure-as-code for deployment and orchestration.
+
+**Current**: `infra/docker/` - Docker Compose configuration
+
+**Why separate infra?**
+
+- **Infrastructure vs Application Code**: Infrastructure configuration is different from application logic
+- **Environment Parity**: Same Docker configs work in dev, staging, and production
+- **Separation of Concerns**: Developers focus on app code, DevOps focus on infra
+- **Multiple Environments**: Easy to add `infra/staging/`, `infra/production/` later
+- **Reusability**: Docker configs can be reused across different projects
+
+---
+
+#### **4. docs/ - Documentation**
+
+**Purpose**: Centralized documentation for the project.
+
+**Why separate docs?**
+
+- **Single Source of Truth**: All documentation in one place
+- **Easy Navigation**: Developers know where to find docs
+- **Version Control**: Documentation evolves with code
+- **Onboarding**: New developers can quickly understand the system
+
+---
+
+### Architecture Benefits Summary
+
+| Aspect               | Monolithic Approach                | Monorepo Approach (Our Design)      |
+| -------------------- | ---------------------------------- | ----------------------------------- |
+| **Code Duplication** | High (copy-paste between services) | Low (shared packages)               |
+| **Database Schema**  | Scattered across services          | Single source of truth              |
+| **Type Safety**      | Inconsistent across services       | Consistent via shared types         |
+| **Deployment**       | All-or-nothing                     | Independent per app                 |
+| **Testing**          | Complex (test entire monolith)     | Simple (test packages in isolation) |
+| **Scalability**      | Limited (scale entire app)         | Flexible (scale specific services)  |
+| **Maintenance**      | Risk of breaking changes           | Clear boundaries, safer updates     |
+| **Onboarding**       | Confusing structure                | Clear separation of concerns        |
+
+---
+
+### Real-World Example: Adding a New Feature
+
+**Scenario**: Add a new "email sending" job type
+
+**Without monorepo structure**:
+
+1. Add email logic to API (mixing concerns)
+2. Copy email code to worker (duplication)
+3. Update database schema in API (tightly coupled)
+4. Risk of inconsistent implementations
+
+**With our monorepo structure**:
+
+1. Update `packages/database/prisma/schema.prisma` (single schema change)
+2. Add email utilities to `packages/shared/` (reusable code)
+3. Implement email job in `apps/worker/` (worker responsibility)
+4. API enqueues jobs, worker processes them (clear separation)
+5. Both apps automatically get updated types from database package
+
+---
+
+### When to Add New Packages vs Apps
+
+**Add a new package when**:
+
+- Code is needed by multiple apps
+- It represents a domain concept (database, auth, metrics)
+- It should be tested independently
+- It has clear interfaces and contracts
+
+**Add a new app when**:
+
+- It's a deployable service with its own lifecycle
+- It needs to scale independently
+- It has distinct runtime requirements
+- It serves a different purpose (API vs worker vs scheduler)
+
+---
+
+This structure is designed for **long-term maintainability** as the project grows from a single API to a full distributed system with multiple workers, services, and packages.
 
 Copy `.env.example` to `.env` and configure:
 
