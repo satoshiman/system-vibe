@@ -469,9 +469,41 @@ npm run build
 
 ### Running Tests
 
+The project includes both unit tests and end-to-end (E2E) tests.
+
+**Run all unit tests:**
+
 ```bash
 cd apps/api
 npm run test
+```
+
+**Run tests in watch mode:**
+
+```bash
+cd apps/api
+npm run test:watch
+```
+
+**Run tests with coverage report:**
+
+```bash
+cd apps/api
+npm run test:cov
+```
+
+**Run E2E tests:**
+
+```bash
+cd apps/api
+npm run test:e2e
+```
+
+**Note:** E2E tests require PostgreSQL and Redis to be running. Start them with:
+
+```bash
+cd infra/docker
+docker compose up -d postgres redis
 ```
 
 ## API Endpoints
