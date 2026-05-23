@@ -493,9 +493,146 @@ Returns the health status of all services.
   "services": {
     "api": "healthy",
     "database": "healthy",
-    "redis": "healthy"
+    "redis": "healthy",
+    "auth": "healthy"
   },
-  "version": "0.1.0"
+  "version": "0.2.0"
+}
+```
+
+### Authentication
+
+#### Register
+
+```
+POST /api/auth/register
+```
+
+Register a new user account.
+
+**Request Body:**
+
+```json
+{
+  "email": "user@example.com",
+  "password": "password123",
+  "name": "John Doe"
+}
+```
+
+**Response:**
+
+```json
+{
+  "user": {
+    "id": "cuid123",
+    "email": "user@example.com",
+    "name": "John Doe"
+  },
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+
+#### Login
+
+```
+POST /api/auth/login
+```
+
+Authenticate with existing credentials.
+
+**Request Body:**
+
+```json
+{
+  "email": "user@example.com",
+  "password": "password123"
+}
+```
+
+**Response:**
+
+```json
+{
+  "user": {
+    "id": "cuid123",
+    "email": "user@example.com",
+    "name": "John Doe"
+  },
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+
+#### Refresh Token
+
+```
+POST /api/auth/refresh
+```
+
+Refresh an expired access token using a refresh token.
+
+**Request Body:**
+
+```json
+{
+  "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+
+**Response:**
+
+```json
+{
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+
+#### Get Profile
+
+```
+GET /api/auth/me
+```
+
+Get the current user's profile (requires authentication).
+
+**Headers:**
+
+```
+Authorization: Bearer <access_token>
+```
+
+**Response:**
+
+```json
+{
+  "id": "cuid123",
+  "email": "user@example.com",
+  "name": "John Doe"
+}
+```
+
+#### Logout
+
+```
+POST /api/auth/logout
+```
+
+Logout the current user (requires authentication).
+
+**Headers:**
+
+```
+Authorization: Bearer <access_token>
+```
+
+**Response:**
+
+```json
+{
+  "message": "Logged out successfully"
 }
 ```
 
@@ -577,12 +714,12 @@ docker compose down -v
 - [x] Nginx reverse proxy configuration
 - [x] Health check with actual connection verification
 
-### Phase 2: Authentication (Planned)
+### Phase 2: Authentication ✅
 
-- [ ] User registration/login
-- [ ] JWT token authentication
-- [ ] Auth guards
-- [ ] Session storage in Redis
+- [x] User registration/login
+- [x] JWT token authentication
+- [x] Auth guards
+- [x] Session storage in Redis
 
 ## Contributing
 

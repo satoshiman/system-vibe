@@ -32,6 +32,7 @@ export class HealthService implements OnModuleInit, OnModuleDestroy {
   async getHealth() {
     let dbStatus = 'unknown';
     let redisStatus = 'unknown';
+    const authStatus = 'healthy';
 
     try {
       if (this.dbConnected) {
@@ -63,8 +64,9 @@ export class HealthService implements OnModuleInit, OnModuleDestroy {
         api: 'healthy',
         database: dbStatus,
         redis: redisStatus,
+        auth: authStatus,
       },
-      version: '0.1.0',
+      version: '0.2.0',
     };
   }
 }
