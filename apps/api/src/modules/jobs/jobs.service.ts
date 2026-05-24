@@ -68,8 +68,9 @@ export class JobsService {
   }
 
   async findAll(filterDto: FilterJobsDto): Promise<{ jobs: JobResponseDto[]; total: number }> {
-    const { status, type, page = 1, limit = 20 } = filterDto;
+    const { status, type, priority, page = 1, limit = 20 } = filterDto;
     const skip = (Number(page) - 1) * Number(limit);
+    const limitNumber = Number(limit);
 
     const where: Record<string, unknown> = {};
 
@@ -81,11 +82,15 @@ export class JobsService {
       where.type = type;
     }
 
+    if (priority) {
+      where.priority = priority;
+    }
+
     const [jobs, total] = await Promise.all([
       this.prisma.job.findMany({
         where,
         skip,
-        take: limit,
+        take: limitNumber,
         orderBy: { createdAt: 'desc' },
       }),
       this.prisma.job.count({ where }),

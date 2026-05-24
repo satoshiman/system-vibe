@@ -23,6 +23,16 @@ export class FilterJobsDto {
   type?: string;
 
   @ApiProperty({
+    description: 'Filter by job priority',
+    example: 'normal',
+    enum: ['low', 'normal', 'high'],
+    required: false,
+  })
+  @IsOptional()
+  @IsIn(['low', 'normal', 'high'])
+  priority?: string;
+
+  @ApiProperty({
     description: 'Page number',
     example: 1,
     required: false,

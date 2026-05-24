@@ -202,6 +202,94 @@ Refresh token rotation is triggered from the client in the following scenarios:
 ## Redis & Queue
 
 <details>
+<summary>What is the difference between PENDING and QUEUED job status?</summary>
+
+In SystemVibe's job queue system, PENDING and QUEUED represent different stages of the job lifecycle:
+
+**PENDING Status**
+
+- Job has just been created in the PostgreSQL database
+- Not yet added to BullMQ queue
+- This is the initial state when a job creation request is received
+- Set at line 26 in `jobs.service.ts` during job creation
+
+**QUEUED Status**
+
+- Job has been successfully added to BullMQ queue
+- Waiting for a worker to pick it up for processing
+- Set at line 50-53 in `jobs.service.ts` after `jobsQueue.add()` succeeds
+- Job is now in Redis and ready to be processed
+
+**Status Flow:**
+
+```
+PENDING (create in DB) → QUEUED (add to BullMQ) → PROCESSING (worker picks up)
+```
+
+**Why separate statuses?**
+
+- Clear tracking: Know if job was successfully enqueued or not
+- Debugging: If job stuck in PENDING, there's a queue connection issue
+- Error handling: If `jobsQueue.add()` fails, job remains in PENDING for retry
+- Data integrity: PostgreSQL is the source of truth, Redis is the processing queue
+
+**Practical example:**
+
+- If Redis is down, jobs will be created with PENDING status but never transition to QUEUED
+- Once Redis recovers, a recovery mechanism can scan for PENDING jobs and re-enqueue them
+
+</details>
+
+<details>
+<summary>How does job priority work in BullMQ?</summary>
+
+In SystemVibe, job priority determines the order in which jobs are processed by workers.
+
+**Priority Levels**
+
+- `high`: Processed first (BullMQ value: 1)
+- `normal`: Default priority (BullMQ value: 10)
+- `low`: Processed last (BullMQ value: 20)
+
+**How BullMQ Priority Works**
+
+- BullMQ uses **lower numbers = higher priority**
+- Jobs with priority 1 are processed before jobs with priority 10
+- Jobs with priority 10 are processed before jobs with priority 20
+- Jobs with the same priority are processed in FIFO order
+
+**Implementation in SystemVibe**
+
+- Priority mapping is defined in `jobs.service.ts` at line 134-141
+- When creating a job, priority is converted to BullMQ numeric value
+- The priority is stored in PostgreSQL for filtering and tracking
+
+**Example Usage**
+
+```json
+{
+  "type": "image-resize",
+  "payload": { ... },
+  "priority": "high"
+}
+```
+
+**Filtering by Priority**
+
+- Jobs can be filtered by priority via GET /api/jobs?priority=high
+- BullMQ Board UI has a "PRIORITIES" tab to view prioritized jobs
+- This helps monitor and manage high-priority workloads
+
+**Best Practices**
+
+- Use `high` priority sparingly for urgent tasks
+- Use `normal` for most jobs (default)
+- Use `low` for background tasks that can wait
+- Avoid setting all jobs to high priority (defeats the purpose)
+
+</details>
+
+<details>
 <summary>What happens when Redis is restarted in SystemVibe?</summary>
 
 With the current setup in `docker-compose.yml`, Redis is configured with AOF persistence:

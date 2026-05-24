@@ -27,6 +27,11 @@ export class JobsController {
     enum: ['PENDING', 'QUEUED', 'PROCESSING', 'COMPLETED', 'FAILED', 'CANCELLED'],
   })
   @ApiQuery({ name: 'type', required: false })
+  @ApiQuery({
+    name: 'priority',
+    required: false,
+    enum: ['low', 'normal', 'high'],
+  })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   async findAll(
