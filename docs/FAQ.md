@@ -167,3 +167,52 @@ docker exec systemvibe-redis redis-cli ping
 - Local development: `redis://localhost:6379`
 
 </details>
+
+## Testing
+
+<details>
+<summary>Việc viết test có tiêu chí gì không?</summary>
+
+Việc viết test trong SystemVibe tuân theo các tiêu chí sau:
+
+**1. Cấu trúc test (AAA Pattern)**
+
+- **Arrange**: Chuẩn bị dữ liệu và điều kiện test
+- **Act**: Thực thi code cần test
+- **Assert**: Kiểm tra kết quả
+
+**2. Quy tắc đặt tên**
+
+- File test: `*.spec.ts` (unit), `*.e2e-spec.ts` (E2E)
+- Mô tả test: "should [hành vi mong đợi] when [điều kiện]"
+- Ví dụ: "should return 401 when token is invalid"
+
+**3. Một assertion mỗi test**
+
+- Mỗi test chỉ nên kiểm tra một điều kiện
+- Tách các test case riêng biệt để dễ debug
+
+**4. Độc lập giữa các test**
+
+- Mỗi test không được phụ thuộc vào test khác
+- Không chia sẻ state giữa các test
+
+**5. Sử dụng dữ liệu ngẫu nhiên**
+
+- Dùng `Date.now()` hoặc random string để tránh xung đột dữ liệu
+- Đảm bảo test có thể chạy lặp lại mà không lỗi
+
+**6. Mock external dependencies**
+
+- Unit test không được kết nối database, network, file system
+- Mock database, Redis, external services trong unit test
+
+**7. Tỷ lệ test (Test Pyramid)**
+
+- 70% Unit tests
+- 20% Integration tests
+- 10% E2E tests
+
+Xem chi tiết tại [docs/TEST.md](./TEST.md)
+
+</details>

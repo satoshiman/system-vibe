@@ -20,6 +20,17 @@ async function bootstrap() {
     .setDescription('SystemVibe API documentation')
     .setVersion('0.1.0')
     .addTag('health')
+    .addBearerAuth(
+      {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT',
+        name: 'JWT',
+        description: 'Enter JWT token',
+        in: 'header',
+      },
+      'JWT-auth' // This name is used for referencing in @ApiBearerAuth()
+    )
     .build();
 
   const document = SwaggerModule.createDocument(app, config);

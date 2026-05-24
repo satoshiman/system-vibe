@@ -83,6 +83,7 @@ model User {
 ```
 
 **Fields:**
+
 - `id` - Unique user identifier (CUID)
 - `email` - User email (unique, used for login)
 - `name` - Optional display name
@@ -104,6 +105,7 @@ TTL: 86400 seconds (24 hours)
 ```
 
 **Purpose:**
+
 - Track active sessions
 - Enable session revocation (logout)
 - Prevent token reuse after logout
@@ -118,6 +120,85 @@ TTL: 86400 seconds (24 hours)
 
 ## JWT Token Strategy
 
+### What is JWT?
+
+**JWT (JSON Web Token)** is a compact, URL-safe means of representing claims to be transferred between two parties. It consists of three parts separated by dots:
+
+```
+Header.Payload.Signature
+```
+
+**Example JWT:**
+
+```
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c
+```
+
+**Three Parts:**
+
+1. **Header** - Algorithm and token type
+
+   ```json
+   {
+     "alg": "HS256",
+     "typ": "JWT"
+   }
+   ```
+
+2. **Payload** - User data (claims)
+
+   ```json
+   {
+     "sub": "user123",
+     "email": "user@example.com",
+     "iat": 1516239022,
+     "exp": 1516242622
+   }
+   ```
+
+3. **Signature** - Cryptographic signature to verify authenticity
+   ```
+   HMACSHA256(
+     base64UrlEncode(header) + "." + base64UrlEncode(payload),
+     secret
+   )
+   ```
+
+**Why JWT?**
+
+- **Stateless**: No server-side session storage needed
+- **Self-contained**: All user info is in the token
+- **Cross-domain**: Works across different services
+- **Standard**: Widely adopted industry standard
+
+### Access Token vs Refresh Token
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    TOKEN COMPARISON                              │
+├──────────────────┬──────────────────────────────────────────────┤
+│                  │              ACCESS TOKEN                      │
+├──────────────────┼──────────────────────────────────────────────┤
+│ Purpose          │ Authenticate API requests                     │
+│ Lifetime         │ Short (15 minutes)                            │
+│ Storage          │ Client memory / localStorage                  │
+│ Sent with        │ Every API request (Authorization header)     │
+│ Security         │ Less critical if leaked (short-lived)        │
+│ Validation       │ Verify signature + check Redis session       │
+└──────────────────┴──────────────────────────────────────────────┘
+
+┌──────────────────┬──────────────────────────────────────────────┐
+│                  │              REFRESH TOKEN                     │
+├──────────────────┼──────────────────────────────────────────────┤
+│ Purpose          │ Obtain new access tokens                     │
+│ Lifetime         │ Long (7 days)                                │
+│ Storage          │ Database (User.refreshToken field)            │
+│ Sent with        │ Only to /refresh endpoint                    │
+│ Security         │ Critical if leaked (long-lived)              │
+│ Validation       │ Verify signature + match DB record           │
+└──────────────────┴──────────────────────────────────────────────┘
+```
+
 ### Access Token
 
 - **Purpose:** Short-lived authentication for API requests
@@ -125,6 +206,7 @@ TTL: 86400 seconds (24 hours)
 - **Payload:** `{ sub: userId, email: userEmail }`
 - **Secret:** `JWT_SECRET` environment variable
 - **Usage:** Bearer token in `Authorization` header
+- **Security:** Short lifetime reduces risk if leaked
 
 ### Refresh Token
 
@@ -134,13 +216,131 @@ TTL: 86400 seconds (24 hours)
 - **Secret:** `JWT_REFRESH_SECRET` environment variable
 - **Storage:** Database (User.refreshToken field)
 - **Rotation:** New refresh token issued on each refresh
+- **Security:** Stored securely in database, rotated on use
+
+### Token Lifecycle Flow
+
+```
+┌─────────────┐
+│   Client    │
+└──────┬──────┘
+       │
+       │ 1. Register/Login
+       │    (email + password)
+       ▼
+┌─────────────────────────────────────────┐
+│         Auth API                         │
+│  ┌───────────────────────────────────┐  │
+│  │ 1. Validate credentials          │  │
+│  │ 2. Hash password (bcrypt)         │  │
+│  │ 3. Generate ACCESS TOKEN (15min)  │  │
+│  │ 4. Generate REFRESH TOKEN (7d)   │  │
+│  │ 5. Store session in Redis (24h)   │  │
+│  │ 6. Save refresh token in DB       │  │
+│  └───────────────────────────────────┘  │
+└──────────────┬──────────────────────────┘
+               │
+               │ 2. Return both tokens
+               ▼
+┌─────────────────────────────────────────┐
+│         Client                           │
+│  ┌───────────────────────────────────┐  │
+│  │ accessToken:  "eyJhbGci..."        │  │
+│  │ refreshToken: "eyJhbGci..."        │  │
+│  │                                    │  │
+│  │ Store accessToken in memory       │  │
+│  │ Store refreshToken securely       │  │
+│  └───────────────────────────────────┘  │
+└──────────────┬──────────────────────────┘
+               │
+               │ 3. API Request (every 15min)
+               │    Authorization: Bearer <accessToken>
+               ▼
+┌─────────────────────────────────────────┐
+│         Auth API                         │
+│  ┌───────────────────────────────────┐  │
+│  │ 1. Verify JWT signature           │  │
+│  │ 2. Check Redis session exists    │  │
+│  │ 3. Allow access if valid          │  │
+│  └───────────────────────────────────┘  │
+└──────────────┬──────────────────────────┘
+               │
+               │ 4. Access Token Expired (after 15min)
+               ▼
+┌─────────────────────────────────────────┐
+│         Client                           │
+│  ┌───────────────────────────────────┐  │
+│  │ accessToken expired!              │  │
+│  │ Use refreshToken to get new one  │  │
+│  └───────────────────────────────────┘  │
+└──────────────┬──────────────────────────┘
+               │
+               │ 5. Refresh Token Request
+               │    POST /api/auth/refresh
+               │    { refreshToken: "..." }
+               ▼
+┌─────────────────────────────────────────┐
+│         Auth API                         │
+│  ┌───────────────────────────────────┐  │
+│  │ 1. Verify refresh token signature │  │
+│  │ 2. Check DB for matching token   │  │
+│  │ 3. Generate NEW access token     │  │
+│  │ 4. Generate NEW refresh token    │  │
+│  │ 5. Update DB with new refresh    │  │
+│  │ 6. Renew Redis session TTL        │  │
+│  └───────────────────────────────────┘  │
+└──────────────┬──────────────────────────┘
+               │
+               │ 6. Return new tokens
+               ▼
+┌─────────────────────────────────────────┐
+│         Client                           │
+│  ┌───────────────────────────────────┐  │
+│  │ New accessToken (15min)         │  │
+│  │ New refreshToken (7d)            │  │
+│  │ Old refresh token invalidated    │  │
+│  └───────────────────────────────────┘  │
+└─────────────────────────────────────────┘
+```
+
+### Token Rotation Security
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│              TOKEN ROTATION (Security Feature)                   │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  User Request: Refresh with token A                             │
+│       │                                                          │
+│       ▼                                                          │
+│  Server validates token A ✓                                      │
+│       │                                                          │
+│       ▼                                                          │
+│  Server generates NEW token B                                   │
+│       │                                                          │
+│       ▼                                                          │
+│  Server saves token B to database                                │
+│       │                                                          │
+│       ▼                                                          │
+│  Server returns token B to client                                │
+│                                                                  │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │ SECURITY: Token A is now INVALID                          │  │
+│  │ If attacker stole token A, they cannot use it again       │  │
+│  │ because database now contains token B                     │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
 
 ### Token Validation
 
 JWT Strategy (`strategies/jwt.strategy.ts`):
+
 - Extracts token from `Authorization: Bearer <token>` header
 - Verifies signature using `JWT_SECRET`
 - Validates payload structure
+- Checks Redis session exists (prevents revoked token usage)
 - Returns user context for request
 
 ## API Endpoints
@@ -150,6 +350,7 @@ JWT Strategy (`strategies/jwt.strategy.ts`):
 **Endpoint:** `POST /api/auth/register`
 
 **Request Body:**
+
 ```json
 {
   "email": "user@example.com",
@@ -159,11 +360,13 @@ JWT Strategy (`strategies/jwt.strategy.ts`):
 ```
 
 **Validation:**
+
 - `email` - Must be valid email format
 - `password` - Minimum 6 characters
 - `name` - Optional string
 
 **Response:**
+
 ```json
 {
   "user": {
@@ -177,6 +380,7 @@ JWT Strategy (`strategies/jwt.strategy.ts`):
 ```
 
 **Process:**
+
 1. Check if email already exists
 2. Hash password with bcrypt (10 rounds)
 3. Create user in PostgreSQL
@@ -189,6 +393,7 @@ JWT Strategy (`strategies/jwt.strategy.ts`):
 **Endpoint:** `POST /api/auth/login`
 
 **Request Body:**
+
 ```json
 {
   "email": "user@example.com",
@@ -197,10 +402,12 @@ JWT Strategy (`strategies/jwt.strategy.ts`):
 ```
 
 **Validation:**
+
 - `email` - Must be valid email format
 - `password` - Required string
 
 **Response:**
+
 ```json
 {
   "user": {
@@ -214,6 +421,7 @@ JWT Strategy (`strategies/jwt.strategy.ts`):
 ```
 
 **Process:**
+
 1. Find user by email
 2. Compare password hash with bcrypt
 3. Generate JWT tokens
@@ -225,6 +433,7 @@ JWT Strategy (`strategies/jwt.strategy.ts`):
 **Endpoint:** `POST /api/auth/refresh`
 
 **Request Body:**
+
 ```json
 {
   "refreshToken": "eyJhbGciOiJIUzI1NiIs..."
@@ -232,6 +441,7 @@ JWT Strategy (`strategies/jwt.strategy.ts`):
 ```
 
 **Response:**
+
 ```json
 {
   "accessToken": "eyJhbGciOiJIUzI1NiIs...",
@@ -240,6 +450,7 @@ JWT Strategy (`strategies/jwt.strategy.ts`):
 ```
 
 **Process:**
+
 1. Verify refresh token signature
 2. Extract user ID from payload
 3. Find user and verify refresh token matches
@@ -255,11 +466,13 @@ JWT Strategy (`strategies/jwt.strategy.ts`):
 **Endpoint:** `POST /api/auth/logout`
 
 **Headers:**
+
 ```
 Authorization: Bearer <accessToken>
 ```
 
 **Response:**
+
 ```json
 {
   "message": "Logged out successfully"
@@ -267,6 +480,7 @@ Authorization: Bearer <accessToken>
 ```
 
 **Process:**
+
 1. Validate access token (JWT guard)
 2. Delete session from Redis
 3. Clear refresh token in database
@@ -279,11 +493,13 @@ Authorization: Bearer <accessToken>
 **Endpoint:** `GET /api/auth/me`
 
 **Headers:**
+
 ```
 Authorization: Bearer <accessToken>
 ```
 
 **Response:**
+
 ```json
 {
   "id": "clxxx...",
@@ -293,6 +509,7 @@ Authorization: Bearer <accessToken>
 ```
 
 **Process:**
+
 1. Validate access token (JWT guard)
 2. Extract user ID from token
 3. Find user in database
@@ -304,29 +521,34 @@ Authorization: Bearer <accessToken>
 ## Security Best Practices
 
 ### Password Security
+
 - **Bcrypt hashing** with 10 salt rounds
 - Never store plain text passwords
 - Minimum 6 character password requirement
 
 ### Token Security
+
 - **Short-lived access tokens** (15 minutes)
 - **Separate secrets** for access and refresh tokens
 - **Token rotation** on refresh
 - **Bearer token** in Authorization header
 
 ### Session Security
+
 - **Redis session tracking** for revocation
 - **24-hour session TTL** for automatic cleanup
 - **Immediate invalidation** on logout
 - **Session validation** on protected routes
 
 ### Environment Variables
+
 ```env
 JWT_SECRET=your-secret-key-change-in-production
 JWT_REFRESH_SECRET=your-refresh-secret-key-change-in-production
 ```
 
 **Important:**
+
 - Use strong, random secrets in production
 - Never commit secrets to version control
 - Use different secrets for access and refresh tokens
@@ -335,6 +557,7 @@ JWT_REFRESH_SECRET=your-refresh-secret-key-change-in-production
 ## Usage Examples
 
 ### Register a new user
+
 ```bash
 curl -X POST http://localhost:3000/api/auth/register \
   -H "Content-Type: application/json" \
@@ -346,6 +569,7 @@ curl -X POST http://localhost:3000/api/auth/register \
 ```
 
 ### Login
+
 ```bash
 curl -X POST http://localhost:3000/api/auth/login \
   -H "Content-Type: application/json" \
@@ -356,12 +580,14 @@ curl -X POST http://localhost:3000/api/auth/login \
 ```
 
 ### Access protected route
+
 ```bash
 curl -X GET http://localhost:3000/api/auth/me \
   -H "Authorization: Bearer <accessToken>"
 ```
 
 ### Refresh tokens
+
 ```bash
 curl -X POST http://localhost:3000/api/auth/refresh \
   -H "Content-Type: application/json" \
@@ -371,6 +597,7 @@ curl -X POST http://localhost:3000/api/auth/refresh \
 ```
 
 ### Logout
+
 ```bash
 curl -X POST http://localhost:3000/api/auth/logout \
   -H "Authorization: Bearer <accessToken>"
@@ -381,16 +608,16 @@ curl -X POST http://localhost:3000/api/auth/logout \
 Use the `JwtAuthGuard` to protect routes:
 
 ```typescript
-import { UseGuards } from '@nestjs/common';
-import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { UseGuards } from "@nestjs/common";
+import { JwtAuthGuard } from "./guards/jwt-auth.guard";
 
-@Controller('protected')
+@Controller("protected")
 export class ProtectedController {
   @Get()
   @UseGuards(JwtAuthGuard)
   getProtectedData(@Request() req) {
     // req.user contains { userId, email }
-    return { message: 'Protected data', user: req.user };
+    return { message: "Protected data", user: req.user };
   }
 }
 ```
@@ -404,6 +631,7 @@ export class ProtectedController {
 - **409 Conflict** - User already exists (on registration)
 
 ### Error Response Format
+
 ```json
 {
   "statusCode": 401,
@@ -415,28 +643,170 @@ export class ProtectedController {
 ## Testing
 
 Run auth tests:
+
 ```bash
 npm test -- auth.service.spec.ts
 ```
 
-Test endpoints via Swagger UI:
+### Testing with Swagger UI
+
+Swagger UI provides an interactive interface to test API endpoints without writing code.
+
+**Access Swagger UI:**
+
 ```
 http://localhost:3000/api/docs
 ```
 
+#### Step 1: Register a New User
+
+1. Open Swagger UI at `http://localhost:3000/api/docs`
+2. Find the `POST /api/auth/register` endpoint
+3. Click **Try it out**
+4. Fill in the request body:
+
+```json
+{
+  "email": "test@example.com",
+  "password": "password123",
+  "name": "Test User"
+}
+```
+
+5. Click **Execute**
+6. Copy the `accessToken` and `refreshToken` from the response
+
+#### Step 2: Configure Authorization
+
+1. Click the **Authorize** button (lock icon) at the top right
+2. In the popup, enter your `accessToken` (without "Bearer " prefix)
+3. Click **Authorize**
+4. Close the popup
+
+Now all requests will include the Bearer token automatically.
+
+#### Step 3: Test Protected Endpoints
+
+**Get Profile (`GET /api/auth/me`):**
+
+1. Find the endpoint
+2. Click **Try it out**
+3. Click **Execute**
+4. You should see your user profile
+
+**Logout (`POST /api/auth/logout`):**
+
+1. Find the endpoint
+2. Click **Try it out**
+3. Click **Execute**
+4. After logout, the token is invalidated
+
+#### Step 4: Test Login Flow
+
+1. Find `POST /api/auth/login`
+2. Click **Try it out**
+3. Enter credentials:
+
+```json
+{
+  "email": "test@example.com",
+  "password": "password123"
+}
+```
+
+4. Click **Execute**
+5. Copy the new tokens and re-authorize in Swagger
+
+#### Step 5: Test Token Refresh
+
+1. Find `POST /api/auth/refresh`
+2. Click **Try it out**
+3. Enter your `refreshToken`:
+
+```json
+{
+  "refreshToken": "eyJhbGciOiJIUzI1NiIs..."
+}
+```
+
+4. Click **Execute**
+5. You'll receive new `accessToken` and `refreshToken`
+6. Update the authorization with the new access token
+
+#### Testing Error Scenarios
+
+**Invalid Credentials:**
+
+```json
+{
+  "email": "wrong@example.com",
+  "password": "wrongpassword"
+}
+```
+
+Expected: `401 Unauthorized`
+
+**Invalid Email Format:**
+
+```json
+{
+  "email": "invalid-email",
+  "password": "password123",
+  "name": "Test"
+}
+```
+
+Expected: `400 Bad Request`
+
+**Short Password:**
+
+```json
+{
+  "email": "test@example.com",
+  "password": "123",
+  "name": "Test"
+}
+```
+
+Expected: `400 Bad Request`
+
+**Access Without Token:**
+
+1. Click **Authorize** and click **Logout** to clear token
+2. Try accessing `GET /api/auth/me`
+   Expected: `401 Unauthorized`
+
+**Access After Logout:**
+
+1. Login to get a token
+2. Call `POST /api/auth/logout`
+3. Try accessing `GET /api/auth/me` with the same token
+   Expected: `401 Unauthorized` (session invalidated)
+
+#### Tips
+
+- **Use unique emails** for testing to avoid conflicts: `test-${Date.now()}@example.com`
+- **Copy tokens carefully** - they are long strings
+- **Re-authorize** after getting new tokens from login/refresh
+- **Check response codes** - green = success, red = error
+- **View response body** - click the response to see full details
+
 ## Troubleshooting
 
 ### Session expired
+
 - Redis session TTL is 24 hours
 - User must re-login after session expires
 - Access tokens expire in 15 minutes (use refresh token)
 
 ### Invalid refresh token
+
 - Refresh token may have been revoked on logout
 - Token rotation invalidates old refresh tokens
 - User must re-login
 
 ### Redis connection issues
+
 - Ensure Redis is running on `localhost:6379`
 - Check `REDIS_URL` environment variable
 - Verify Redis is accessible from API server
@@ -444,6 +814,7 @@ http://localhost:3000/api/docs
 ## Future Enhancements
 
 Potential improvements to consider:
+
 - Email verification on registration
 - Password reset functionality
 - Multi-factor authentication (2FA)
