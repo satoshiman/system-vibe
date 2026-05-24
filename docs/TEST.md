@@ -324,6 +324,7 @@ apps/api/
 
 - `auth.e2e-spec.ts` - Complete authentication flows
 - `health.e2e-spec.ts` - Health check endpoint
+- `jobs.e2e-spec.ts` - Job submission, retrieval, and cancellation flows
 
 **Infrastructure Required:**
 

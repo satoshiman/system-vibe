@@ -753,6 +753,16 @@ docker compose down -v
 - [x] Auth guards
 - [x] Session storage in Redis
 
+### Phase 3: Job Queue Basics ✅
+
+- [x] Job entity in PostgreSQL with Prisma
+- [x] BullMQ queue setup with Redis
+- [x] Job submission API endpoint
+- [x] Job retrieval and filtering
+- [x] Job cancellation endpoint
+- [x] Automatic retry with exponential backoff
+- [x] Swagger documentation for all endpoints
+
 ## Contributing
 
 1. Fork the repository

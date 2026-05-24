@@ -19,5 +19,34 @@ model User {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
+  jobs           Job[]
+
   @@map("user")
+}
+
+model Job {
+  id             String   @id @default(cuid())
+  type           String
+  userId         String
+  payload        Json
+  status         String   @default("PENDING")
+  createdAt      DateTime @default(now())
+  startedAt      DateTime?
+  completedAt    DateTime?
+  result         Json?
+  error          String?
+  attemptCount   Int      @default(0)
+  maxRetries     Int      @default(3)
+  nextRetryAt    DateTime?
+  priority       String   @default("normal")
+  timeout        Int      @default(3600)
+  webhookUrl     String?
+
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([type])
+  @@map("job")
 }

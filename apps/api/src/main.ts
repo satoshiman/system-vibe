@@ -20,6 +20,8 @@ async function bootstrap() {
     .setDescription('SystemVibe API documentation')
     .setVersion('0.1.0')
     .addTag('health')
+    .addTag('auth')
+    .addTag('jobs')
     .addBearerAuth(
       {
         type: 'http',
