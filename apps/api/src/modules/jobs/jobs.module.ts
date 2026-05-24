@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { BullModule } from '@nestjs/bull';
+import { BullModule } from '@nestjs/bullmq';
 import { JobsController } from './jobs.controller';
 import { JobsService } from './jobs.service';
 import { QueueModule } from '../queue/queue.module';

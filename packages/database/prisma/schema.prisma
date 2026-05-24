@@ -27,7 +27,7 @@ model User {
 model Job {
   id             String   @id @default(cuid())
   type           String
-  userId         String
+  userId         String?
   payload        Json
   status         String   @default("PENDING")
   createdAt      DateTime @default(now())
@@ -42,7 +42,7 @@ model Job {
   timeout        Int      @default(3600)
   webhookUrl     String?
 
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user           User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([status])

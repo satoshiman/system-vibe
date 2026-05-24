@@ -324,7 +324,7 @@ apps/api/
 
 - `auth.e2e-spec.ts` - Complete authentication flows
 - `health.e2e-spec.ts` - Health check endpoint
-- `jobs.e2e-spec.ts` - Job submission, retrieval, and cancellation flows
+- `jobs.e2e-spec.ts` - Job submission, retrieval, and cancellation flows (public endpoints, no authentication required)
 
 **Infrastructure Required:**
 
@@ -673,6 +673,61 @@ describe("Auth Flow (e2e)", () => {
       .post("/api/auth/logout")
       .set("Authorization", `Bearer ${accessToken}`)
       .expect(200);
+  });
+});
+```
+
+### Example 4: E2E Test - Public Jobs API
+
+```typescript
+describe("Jobs (e2e)", () => {
+  let app: INestApplication;
+
+  beforeAll(async () => {
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
+
+    app = moduleFixture.createNestApplication();
+    app.setGlobalPrefix("api");
+    await app.init();
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  describe("/api/jobs (POST)", () => {
+    it("should create a new job without authentication", () => {
+      return request(app.getHttpServer())
+        .post("/api/jobs")
+        .send({
+          type: "image-resize",
+          payload: {
+            imageUrl: "https://example.com/image.jpg",
+            width: 800,
+            height: 600,
+          },
+        })
+        .expect(201)
+        .expect((res) => {
+          expect(res.body).toHaveProperty("id");
+          expect(res.body).toHaveProperty("userId");
+          expect(res.body.status).toBe("QUEUED");
+        });
+    });
+  });
+
+  describe("/api/jobs (GET)", () => {
+    it("should list all jobs without authentication", () => {
+      return request(app.getHttpServer())
+        .get("/api/jobs")
+        .expect(200)
+        .expect((res) => {
+          expect(res.body).toHaveProperty("jobs");
+          expect(res.body).toHaveProperty("total");
+        });
+    });
   });
 });
 ```

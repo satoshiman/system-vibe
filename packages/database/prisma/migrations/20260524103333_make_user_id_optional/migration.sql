@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "job" ALTER COLUMN "userId" DROP NOT NULL;

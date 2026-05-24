@@ -1029,14 +1029,16 @@ Worker (processes) → Job
 - [x] Job timeout handling
 - [x] Unit tests for JobsService
 - [x] E2E tests for JobsController
+- [x] Public jobs API (no authentication required)
+- [x] Optional userId in Job entity
 
 **API Endpoints**:
 
 ```
-POST   /jobs                    # Submit new job
-GET    /jobs/{id}               # Get job by ID
-GET    /jobs                    # List user's jobs (with filtering)
-DELETE /jobs/{id}               # Cancel job (if not started)
+POST   /jobs                    # Submit new job (public, no auth)
+GET    /jobs/{id}               # Get job by ID (public, no auth)
+GET    /jobs                    # List all jobs (public, no auth)
+DELETE /jobs/{id}               # Cancel job (public, no auth)
 ```
 
 **Deliverables**:
@@ -1045,8 +1047,10 @@ DELETE /jobs/{id}               # Cancel job (if not started)
 - [x] BullMQ queue setup and configuration
 - [x] Job lifecycle management
 - [x] Retry logic with exponential backoff
-- [x] Unit tests (15 tests for JobsService)
-- [x] E2E tests (22 tests for JobsController)
+- [x] Unit tests (13 tests for JobsService)
+- [x] E2E tests (18 tests for JobsController)
+- [x] Public jobs API without authentication
+- [x] BullMQ Board UI for queue monitoring at `/admin/queues`
 - [x] Jest configuration for testing
 - [x] Test scripts in package.json
 - [x] BullMQ Board UI dashboard for queue monitoring (http://localhost:3000/admin/queues)

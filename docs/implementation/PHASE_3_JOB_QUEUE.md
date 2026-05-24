@@ -6,7 +6,7 @@ After Phase 3, you'll have:
 
 - ✅ Job entity in PostgreSQL with Prisma
 - ✅ BullMQ queue setup with Redis
-- ✅ Job submission API endpoint
+- ✅ Job submission API endpoint (public, no authentication)
 - ✅ Job retrieval and filtering
 - ✅ Job cancellation endpoint
 - ✅ Automatic retry with exponential backoff
@@ -14,25 +14,28 @@ After Phase 3, you'll have:
 - ✅ Unit tests for JobsService
 - ✅ E2E tests for JobsController
 - ✅ Jest configuration and test scripts
+- ✅ BullMQ Board UI for queue monitoring
 
 ---
 
 ## Prerequisites
 
-**Before starting Phase 3, ensure Phase 2 is complete:**
+**Before starting Phase 3, ensure Phase 1 is complete:**
 
-- Authentication system working (JWT tokens)
-- Redis session storage operational
-- User registration/login functional
-- Auth guards protecting endpoints
+- Docker Compose setup (API, PostgreSQL, Redis)
+- NestJS project structure with proper modules
+- Database initialization and migrations
+- API health check endpoint
+
+**Note:** Phase 2 (Authentication) is NOT required for Phase 3. The jobs API is public and does not require authentication.
 
 ---
 
 ## Step 1: Install BullMQ Dependencies
 
 ```bash
-# Install BullMQ and NestJS Bull integration
-npm install --workspace=apps/api @nestjs/bull bullmq
+# Install BullMQ and NestJS BullMQ integration
+npm install --workspace=apps/api @nestjs/bullmq bullmq
 
 # Install @nestjs/config for configuration management
 npm install --workspace=apps/api @nestjs/config
@@ -40,7 +43,7 @@ npm install --workspace=apps/api @nestjs/config
 
 **Dependencies explained:**
 
-- `@nestjs/bull`: NestJS integration for BullMQ
+- `@nestjs/bullmq`: NestJS integration for BullMQ (modern replacement for @nestjs/bull)
 - `bullmq`: Modern Redis-based queue for Node.js
 - `@nestjs/config`: Configuration management with environment variables
 
@@ -80,7 +83,7 @@ model User {
 model Job {
   id             String   @id @default(cuid())
   type           String
-  userId         String
+  userId         String?
   payload        Json
   status         String   @default("PENDING")
   createdAt      DateTime @default(now())
@@ -95,7 +98,7 @@ model Job {
   timeout        Int      @default(3600)
   webhookUrl     String?
 
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user           User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([status])
@@ -114,7 +117,8 @@ cd ../..
 **Schema changes:**
 
 - `Job` entity with all tracking fields
-- Relationship between User and Job (one-to-many)
+- Relationship between User and Job (one-to-many, optional)
+- `userId` is optional (String?) to support public jobs
 - Indexes for efficient querying
 - Status tracking: PENDING → QUEUED → PROCESSING → COMPLETED/FAILED
 
@@ -206,7 +210,7 @@ EOF
 # Create queue module
 cat > apps/api/src/modules/queue/queue.module.ts << 'EOF'
 import { Module } from '@nestjs/common';
-import { BullModule } from '@nestjs/bull';
+import { BullModule } from '@nestjs/bullmq';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 
 @Module({
@@ -215,12 +219,15 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
-        redis: {
+        connection: {
           host: configService.get('queue.redis.host'),
           port: configService.get('queue.redis.port'),
           password: configService.get('queue.redis.password'),
         },
       }),
+    }),
+    BullModule.registerQueue({
+      name: 'jobs',
     }),
   ],
   exports: [BullModule],
@@ -409,7 +416,7 @@ EOF
 # Create JobsService
 cat > apps/api/src/modules/jobs/jobs.service.ts << 'EOF'
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { InjectQueue } from '@nestjs/bull';
+import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { PrismaService } from '@systemvibe/database';
 import { CreateJobDto } from './dto/create-job.dto';
@@ -423,12 +430,12 @@ export class JobsService {
     @InjectQueue('jobs') private jobsQueue: Queue
   ) {}
 
-  async create(userId: string, createJobDto: CreateJobDto): Promise<JobResponseDto> {
-    // Create job in database
+  async create(createJobDto: CreateJobDto): Promise<JobResponseDto> {
+    // Create job in database without userId (public job)
     const job = await this.prisma.job.create({
       data: {
         type: createJobDto.type,
-        userId,
+        userId: null,
         payload: createJobDto.payload as any,
         priority: createJobDto.priority || 'normal',
         timeout: createJobDto.timeout || 3600,
@@ -465,7 +472,7 @@ export class JobsService {
     return this.toJobResponseDto(updatedJob);
   }
 
-  async findOne(id: string, userId: string): Promise<JobResponseDto> {
+  async findOne(id: string): Promise<JobResponseDto> {
     const job = await this.prisma.job.findUnique({
       where: { id },
     });
@@ -474,24 +481,16 @@ export class JobsService {
       throw new NotFoundException(\`Job with ID \${id} not found\`);
     }
 
-    // Check if user owns this job
-    if (job.userId !== userId) {
-      throw new BadRequestException('You do not have permission to access this job');
-    }
-
     return this.toJobResponseDto(job);
   }
 
   async findAll(
-    userId: string,
     filterDto: FilterJobsDto
   ): Promise<{ jobs: JobResponseDto[]; total: number }> {
     const { status, type, page = 1, limit = 20 } = filterDto;
     const skip = (page - 1) * limit;
 
-    const where: Record<string, unknown> = {
-      userId,
-    };
+    const where: Record<string, unknown> = {};
 
     if (status) {
       where.status = status;
@@ -517,17 +516,13 @@ export class JobsService {
     };
   }
 
-  async cancel(id: string, userId: string): Promise<JobResponseDto> {
+  async cancel(id: string): Promise<JobResponseDto> {
     const job = await this.prisma.job.findUnique({
       where: { id },
     });
 
     if (!job) {
       throw new NotFoundException(\`Job with ID \${id} not found\`);
-    }
-
-    if (job.userId !== userId) {
-      throw new BadRequestException('You do not have permission to cancel this job');
     }
 
     if (job.status === 'PROCESSING' || job.status === 'COMPLETED' || job.status === 'FAILED') {
@@ -563,7 +558,7 @@ export class JobsService {
     return {
       id: job.id as string,
       type: job.type as string,
-      userId: job.userId as string,
+      userId: job.userId as string | null,
       payload: job.payload as Record<string, unknown>,
       status: job.status as string,
       createdAt: job.createdAt as Date,
@@ -584,22 +579,15 @@ EOF
 
 # Create JobsController
 cat > apps/api/src/modules/jobs/jobs.controller.ts << 'EOF'
-import { Controller, Get, Post, Delete, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { Controller, Get, Post, Delete, Body, Param, Query } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { JobsService } from './jobs.service';
 import { CreateJobDto } from './dto/create-job.dto';
 import { JobResponseDto } from './dto/job-response.dto';
 import { FilterJobsDto } from './dto/filter-jobs.dto';
 
-interface RequestWithUser extends Request {
-  user: { userId: string };
-}
-
 @ApiTags('jobs')
 @Controller('jobs')
-@UseGuards(JwtAuthGuard)
-@ApiBearerAuth()
 export class JobsController {
   constructor(private readonly jobsService: JobsService) {}
 
@@ -607,30 +595,27 @@ export class JobsController {
   @ApiOperation({ summary: 'Submit a new job' })
   @ApiResponse({ status: 201, description: 'Job created successfully', type: JobResponseDto })
   @ApiResponse({ status: 400, description: 'Bad request' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  async create(@Request() req: RequestWithUser, @Body() createJobDto: CreateJobDto): Promise<JobResponseDto> {
-    return this.jobsService.create(req.user.userId, createJobDto);
+  async create(@Body() createJobDto: CreateJobDto): Promise<JobResponseDto> {
+    return this.jobsService.create(createJobDto);
   }
 
   @Get()
-  @ApiOperation({ summary: 'List user jobs with filtering' })
+  @ApiOperation({ summary: 'List all jobs with filtering' })
   @ApiResponse({ status: 200, description: 'Jobs retrieved successfully' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiQuery({ name: 'status', required: false, enum: ['PENDING', 'QUEUED', 'PROCESSING', 'COMPLETED', 'FAILED', 'CANCELLED'] })
   @ApiQuery({ name: 'type', required: false })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
-  async findAll(@Request() req: RequestWithUser, @Query() filterDto: FilterJobsDto): Promise<{ jobs: JobResponseDto[]; total: number }> {
-    return this.jobsService.findAll(req.user.userId, filterDto);
+  async findAll(@Query() filterDto: FilterJobsDto): Promise<{ jobs: JobResponseDto[]; total: number }> {
+    return this.jobsService.findAll(filterDto);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get a specific job by ID' })
   @ApiResponse({ status: 200, description: 'Job retrieved successfully', type: JobResponseDto })
   @ApiResponse({ status: 404, description: 'Job not found' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  async findOne(@Param('id') id: string, @Request() req: RequestWithUser): Promise<JobResponseDto> {
-    return this.jobsService.findOne(id, req.user.userId);
+  async findOne(@Param('id') id: string): Promise<JobResponseDto> {
+    return this.jobsService.findOne(id);
   }
 
   @Delete(':id')
@@ -638,9 +623,8 @@ export class JobsController {
   @ApiResponse({ status: 200, description: 'Job cancelled successfully', type: JobResponseDto })
   @ApiResponse({ status: 400, description: 'Cannot cancel job in current status' })
   @ApiResponse({ status: 404, description: 'Job not found' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  async cancel(@Param('id') id: string, @Request() req: RequestWithUser): Promise<JobResponseDto> {
-    return this.jobsService.cancel(id, req.user.userId);
+  async cancel(@Param('id') id: string): Promise<JobResponseDto> {
+    return this.jobsService.cancel(id);
   }
 }
 EOF
@@ -648,7 +632,7 @@ EOF
 # Create JobsModule
 cat > apps/api/src/modules/jobs/jobs.module.ts << 'EOF'
 import { Module } from '@nestjs/common';
-import { BullModule } from '@nestjs/bull';
+import { BullModule } from '@nestjs/bullmq';
 import { JobsController } from './jobs.controller';
 import { JobsService } from './jobs.service';
 import { QueueModule } from '../queue/queue.module';
@@ -701,16 +685,20 @@ EOF
 
 ---
 
-## Step 8: Update Main.ts for Swagger
+## Step 8: Update Main.ts for Swagger and BullMQ Board
 
 ```bash
-# Update main.ts to add jobs tag
+# Update main.ts to add jobs tag and BullMQ Board
 cat > apps/api/src/main.ts << 'EOF'
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import pino from 'pino';
 import * as dotenv from 'dotenv';
+import { createBullBoard } from '@bull-board/api';
+import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
+import { ExpressAdapter } from '@bull-board/express';
+import { getQueueToken } from '@nestjs/bullmq';
 
 // Load .env from root directory (assumes running from project root)
 dotenv.config();
@@ -746,11 +734,25 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document);
 
+  // BullMQ Board setup
+  const serverAdapter = new ExpressAdapter();
+  serverAdapter.setBasePath('/admin/queues');
+
+  const jobsQueue = app.get(getQueueToken('jobs'));
+
+  createBullBoard({
+    queues: [new BullMQAdapter(jobsQueue, { readOnlyMode: false })],
+    serverAdapter,
+  });
+
+  app.use('/admin/queues', serverAdapter.getRouter());
+
   const port = process.env.API_PORT || 3000;
   await app.listen(port, '0.0.0.0');
 
   logger.info(\`API Server running on http://localhost:\${port}\`);
   logger.info(\`Swagger documentation available at http://localhost:\${port}/api/docs\`);
+  logger.info(\`BullMQ Board available at http://localhost:\${port}/admin/queues\`);
 }
 
 bootstrap().catch((err) => {
@@ -758,6 +760,12 @@ bootstrap().catch((err) => {
   process.exit(1);
 });
 EOF
+```
+
+**Note:** Install BullMQ Board dependencies:
+
+```bash
+npm install --workspace=apps/api @bull-board/api @bull-board/express
 ```
 
 ---
@@ -788,6 +796,24 @@ npm install --workspace=apps/api --save-dev @types/jest jest ts-jest supertest @
 
 # Install BullMQ testing utilities
 npm install --workspace=apps/api --save-dev @nestjs/testing
+```
+
+**Note:** Add test scripts to packages without tests:
+
+```bash
+# Add test script to database package
+# packages/database/package.json
+"scripts": {
+  "test": "echo 'No tests for database package' && exit 0",
+  ...
+}
+
+# Add test script to redis package
+# packages/redis/package.json
+"scripts": {
+  "test": "echo 'No tests for redis package' && exit 0",
+  ...
+}
 ```
 
 ---
@@ -859,7 +885,6 @@ describe('JobsService', () => {
 
   describe('create', () => {
     it('should create a job successfully', async () => {
-      const userId = 'user-id';
       const createJobDto: CreateJobDto = {
         type: 'image-resize',
         payload: { imageUrl: 'https://example.com/image.jpg', width: 800, height: 600 },
@@ -870,7 +895,7 @@ describe('JobsService', () => {
       const mockJob = {
         id: 'job-id',
         type: createJobDto.type,
-        userId,
+        userId: null,
         payload: createJobDto.payload,
         status: 'PENDING',
         priority: 'normal',
@@ -890,7 +915,7 @@ describe('JobsService', () => {
       mockPrisma.job.update.mockResolvedValue({ ...mockJob, status: 'QUEUED' });
       mockQueue.add.mockResolvedValue({ id: 'job-id' });
 
-      const result = await service.create(userId, createJobDto);
+      const result = await service.create(createJobDto);
 
       expect(result).toHaveProperty('id');
       expect(result.type).toBe(createJobDto.type);
@@ -904,7 +929,6 @@ describe('JobsService', () => {
     });
 
     it('should handle high priority correctly', async () => {
-      const userId = 'user-id';
       const createJobDto: CreateJobDto = {
         type: 'image-resize',
         payload: { imageUrl: 'https://example.com/image.jpg' },
@@ -914,7 +938,7 @@ describe('JobsService', () => {
       const mockJob = {
         id: 'job-id',
         type: createJobDto.type,
-        userId,
+        userId: null,
         payload: createJobDto.payload,
         status: 'QUEUED',
         priority: 'high',
@@ -926,7 +950,7 @@ describe('JobsService', () => {
       mockPrisma.job.update.mockResolvedValue(mockJob);
       mockQueue.add.mockResolvedValue({ id: 'job-id' });
 
-      await service.create(userId, createJobDto);
+      await service.create(createJobDto);
 
       expect(mockQueue.add).toHaveBeenCalledWith(
         createJobDto.type,
@@ -940,13 +964,12 @@ describe('JobsService', () => {
 
   describe('findOne', () => {
     it('should return a job by id', async () => {
-      const userId = 'user-id';
       const jobId = 'job-id';
 
       const mockJob = {
         id: jobId,
         type: 'image-resize',
-        userId,
+        userId: null,
         payload: {},
         status: 'QUEUED',
         createdAt: new Date(),
@@ -964,7 +987,7 @@ describe('JobsService', () => {
 
       mockPrisma.job.findUnique.mockResolvedValue(mockJob);
 
-      const result = await service.findOne(jobId, userId);
+      const result = await service.findOne(jobId);
 
       expect(result.id).toBe(jobId);
       expect(mockPrisma.job.findUnique).toHaveBeenCalledWith({ where: { id: jobId } });
@@ -973,47 +996,21 @@ describe('JobsService', () => {
     it('should throw NotFoundException if job not found', async () => {
       mockPrisma.job.findUnique.mockResolvedValue(null);
 
-      await expect(service.findOne('nonexistent-id', 'user-id')).rejects.toThrow(
+      await expect(service.findOne('nonexistent-id')).rejects.toThrow(
         NotFoundException,
       );
-    });
-
-    it('should throw BadRequestException if user does not own job', async () => {
-      const mockJob = {
-        id: 'job-id',
-        userId: 'other-user-id',
-        type: 'image-resize',
-        payload: {},
-        status: 'QUEUED',
-        createdAt: new Date(),
-        startedAt: null,
-        completedAt: null,
-        result: null,
-        error: null,
-        attemptCount: 0,
-        maxRetries: 3,
-        nextRetryAt: null,
-        priority: 'normal',
-        timeout: 3600,
-        webhookUrl: null,
-      };
-
-      mockPrisma.job.findUnique.mockResolvedValue(mockJob);
-
-      await expect(service.findOne('job-id', 'user-id')).rejects.toThrow(BadRequestException);
     });
   });
 
   describe('findAll', () => {
-    it('should return all jobs for a user', async () => {
-      const userId = 'user-id';
+    it('should return all jobs', async () => {
       const filterDto: FilterJobsDto = {};
 
       const mockJobs = [
         {
           id: 'job-1',
           type: 'image-resize',
-          userId,
+          userId: null,
           payload: {},
           status: 'QUEUED',
           createdAt: new Date(),
@@ -1033,12 +1030,12 @@ describe('JobsService', () => {
       mockPrisma.job.findMany.mockResolvedValue(mockJobs);
       mockPrisma.job.count.mockResolvedValue(1);
 
-      const result = await service.findAll(userId, filterDto);
+      const result = await service.findAll(filterDto);
 
       expect(result.jobs).toHaveLength(1);
       expect(result.total).toBe(1);
       expect(mockPrisma.job.findMany).toHaveBeenCalledWith({
-        where: { userId },
+        where: {},
         skip: 0,
         take: 20,
         orderBy: { createdAt: 'desc' },
@@ -1046,45 +1043,42 @@ describe('JobsService', () => {
     });
 
     it('should filter jobs by status', async () => {
-      const userId = 'user-id';
       const filterDto: FilterJobsDto = { status: 'COMPLETED' };
 
       mockPrisma.job.findMany.mockResolvedValue([]);
       mockPrisma.job.count.mockResolvedValue(0);
 
-      await service.findAll(userId, filterDto);
+      await service.findAll(filterDto);
 
       expect(mockPrisma.job.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { userId, status: 'COMPLETED' },
+          where: { status: 'COMPLETED' },
         }),
       );
     });
 
     it('should filter jobs by type', async () => {
-      const userId = 'user-id';
       const filterDto: FilterJobsDto = { type: 'image-resize' };
 
       mockPrisma.job.findMany.mockResolvedValue([]);
       mockPrisma.job.count.mockResolvedValue(0);
 
-      await service.findAll(userId, filterDto);
+      await service.findAll(filterDto);
 
       expect(mockPrisma.job.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { userId, type: 'image-resize' },
+          where: { type: 'image-resize' },
         }),
       );
     });
 
     it('should handle pagination', async () => {
-      const userId = 'user-id';
       const filterDto: FilterJobsDto = { page: 2, limit: 10 };
 
       mockPrisma.job.findMany.mockResolvedValue([]);
       mockPrisma.job.count.mockResolvedValue(0);
 
-      await service.findAll(userId, filterDto);
+      await service.findAll(filterDto);
 
       expect(mockPrisma.job.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -1097,13 +1091,12 @@ describe('JobsService', () => {
 
   describe('cancel', () => {
     it('should cancel a job successfully', async () => {
-      const userId = 'user-id';
       const jobId = 'job-id';
 
       const mockJob = {
         id: jobId,
         type: 'image-resize',
-        userId,
+        userId: null,
         payload: {},
         status: 'QUEUED',
         createdAt: new Date(),
@@ -1123,7 +1116,7 @@ describe('JobsService', () => {
       mockQueue.remove.mockResolvedValue(true);
       mockPrisma.job.update.mockResolvedValue({ ...mockJob, status: 'CANCELLED' });
 
-      const result = await service.cancel(jobId, userId);
+      const result = await service.cancel(jobId);
 
       expect(result.status).toBe('CANCELLED');
       expect(mockQueue.remove).toHaveBeenCalledWith(jobId);
@@ -1136,40 +1129,15 @@ describe('JobsService', () => {
     it('should throw NotFoundException if job not found', async () => {
       mockPrisma.job.findUnique.mockResolvedValue(null);
 
-      await expect(service.cancel('nonexistent-id', 'user-id')).rejects.toThrow(
+      await expect(service.cancel('nonexistent-id')).rejects.toThrow(
         NotFoundException,
       );
-    });
-
-    it('should throw BadRequestException if user does not own job', async () => {
-      const mockJob = {
-        id: 'job-id',
-        userId: 'other-user-id',
-        type: 'image-resize',
-        payload: {},
-        status: 'QUEUED',
-        createdAt: new Date(),
-        startedAt: null,
-        completedAt: null,
-        result: null,
-        error: null,
-        attemptCount: 0,
-        maxRetries: 3,
-        nextRetryAt: null,
-        priority: 'normal',
-        timeout: 3600,
-        webhookUrl: null,
-      };
-
-      mockPrisma.job.findUnique.mockResolvedValue(mockJob);
-
-      await expect(service.cancel('job-id', 'user-id')).rejects.toThrow(BadRequestException);
     });
 
     it('should throw BadRequestException if job is PROCESSING', async () => {
       const mockJob = {
         id: 'job-id',
-        userId: 'user-id',
+        userId: null,
         type: 'image-resize',
         payload: {},
         status: 'PROCESSING',
@@ -1188,13 +1156,13 @@ describe('JobsService', () => {
 
       mockPrisma.job.findUnique.mockResolvedValue(mockJob);
 
-      await expect(service.cancel('job-id', 'user-id')).rejects.toThrow(BadRequestException);
+      await expect(service.cancel('job-id')).rejects.toThrow(BadRequestException);
     });
 
     it('should throw BadRequestException if job is COMPLETED', async () => {
       const mockJob = {
         id: 'job-id',
-        userId: 'user-id',
+        userId: null,
         type: 'image-resize',
         payload: {},
         status: 'COMPLETED',
@@ -1243,7 +1211,7 @@ describe('JobsService', () => {
       mockQueue.remove.mockRejectedValue(new Error('Job not in queue'));
       mockPrisma.job.update.mockResolvedValue({ ...mockJob, status: 'CANCELLED' });
 
-      const result = await service.cancel(jobId, userId);
+      const result = await service.cancel(jobId);
 
       expect(result.status).toBe('CANCELLED');
       expect(mockPrisma.job.update).toHaveBeenCalled();
@@ -1267,8 +1235,6 @@ import { AppModule } from '../src/app.module';
 
 describe('Jobs (e2e)', () => {
   let app: INestApplication;
-  let accessToken: string;
-  let userId: string;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -1279,19 +1245,6 @@ describe('Jobs (e2e)', () => {
     app.setGlobalPrefix('api');
     app.useGlobalPipes(new ValidationPipe());
     await app.init();
-
-    // Register a test user and get token
-    const randomEmail = `jobtest-${Date.now()}@example.com`;
-    const registerRes = await request(app.getHttpServer())
-      .post('/api/auth/register')
-      .send({
-        email: randomEmail,
-        password: 'password123',
-        name: 'Job Test User',
-      });
-
-    accessToken = registerRes.body.accessToken;
-    userId = registerRes.body.user.id;
   });
 
   afterAll(async () => {
@@ -1302,7 +1255,6 @@ describe('Jobs (e2e)', () => {
     it('should create a new job with valid data', () => {
       return request(app.getHttpServer())
         .post('/api/jobs')
-        .set('Authorization', `Bearer ${accessToken}`)
         .send({
           type: 'image-resize',
           payload: {
@@ -1316,7 +1268,7 @@ describe('Jobs (e2e)', () => {
           expect(res.body).toHaveProperty('id');
           expect(res.body).toHaveProperty('type', 'image-resize');
           expect(res.body).toHaveProperty('status', 'QUEUED');
-          expect(res.body).toHaveProperty('userId', userId);
+          expect(res.body).toHaveProperty('userId', null);
           expect(res.body).toHaveProperty('payload');
           expect(res.body).toHaveProperty('createdAt');
           expect(res.body).toHaveProperty('priority', 'normal');
@@ -1327,7 +1279,6 @@ describe('Jobs (e2e)', () => {
     it('should create a job with high priority', () => {
       return request(app.getHttpServer())
         .post('/api/jobs')
-        .set('Authorization', `Bearer ${accessToken}`)
         .send({
           type: 'image-thumbnail',
           payload: { imageUrl: 'https://example.com/image.jpg' },
@@ -1342,7 +1293,6 @@ describe('Jobs (e2e)', () => {
     it('should create a job with custom timeout', () => {
       return request(app.getHttpServer())
         .post('/api/jobs')
-        .set('Authorization', `Bearer ${accessToken}`)
         .send({
           type: 'image-compress',
           payload: { imageUrl: 'https://example.com/image.jpg' },
@@ -1357,7 +1307,6 @@ describe('Jobs (e2e)', () => {
     it('should create a job with webhook URL', () => {
       return request(app.getHttpServer())
         .post('/api/jobs')
-        .set('Authorization', `Bearer ${accessToken}`)
         .send({
           type: 'email-send',
           payload: { to: 'recipient@example.com', subject: 'Test' },
@@ -1369,20 +1318,9 @@ describe('Jobs (e2e)', () => {
         });
     });
 
-    it('should fail without authentication', () => {
-      return request(app.getHttpServer())
-        .post('/api/jobs')
-        .send({
-          type: 'image-resize',
-          payload: { imageUrl: 'https://example.com/image.jpg' },
-        })
-        .expect(401);
-    });
-
     it('should fail with invalid job type', () => {
       return request(app.getHttpServer())
         .post('/api/jobs')
-        .set('Authorization', `Bearer ${accessToken}`)
         .send({
           type: 'invalid-type',
           payload: {},
@@ -1393,7 +1331,6 @@ describe('Jobs (e2e)', () => {
     it('should fail with missing payload', () => {
       return request(app.getHttpServer())
         .post('/api/jobs')
-        .set('Authorization', `Bearer ${accessToken}`)
         .send({
           type: 'image-resize',
         })
@@ -1403,7 +1340,6 @@ describe('Jobs (e2e)', () => {
     it('should fail with invalid priority', () => {
       return request(app.getHttpServer())
         .post('/api/jobs')
-        .set('Authorization', `Bearer ${accessToken}`)
         .send({
           type: 'image-resize',
           payload: {},
@@ -1415,7 +1351,6 @@ describe('Jobs (e2e)', () => {
     it('should fail with timeout too low', () => {
       return request(app.getHttpServer())
         .post('/api/jobs')
-        .set('Authorization', `Bearer ${accessToken}`)
         .send({
           type: 'image-resize',
           payload: {},
@@ -1427,7 +1362,6 @@ describe('Jobs (e2e)', () => {
     it('should fail with timeout too high', () => {
       return request(app.getHttpServer())
         .post('/api/jobs')
-        .set('Authorization', `Bearer ${accessToken}`)
         .send({
           type: 'image-resize',
           payload: {},
@@ -1443,7 +1377,6 @@ describe('Jobs (e2e)', () => {
     beforeAll(async () => {
       const res = await request(app.getHttpServer())
         .post('/api/jobs')
-        .set('Authorization', `Bearer ${accessToken}`)
         .send({
           type: 'image-resize',
           payload: { imageUrl: 'https://example.com/image.jpg' },
@@ -1452,10 +1385,9 @@ describe('Jobs (e2e)', () => {
       jobId = res.body.id;
     });
 
-    it('should list all jobs for authenticated user', () => {
+    it('should list all jobs', () => {
       return request(app.getHttpServer())
         .get('/api/jobs')
-        .set('Authorization', `Bearer ${accessToken}`)
         .expect(200)
         .expect((res: any) => {
           expect(res.body).toHaveProperty('jobs');
@@ -1468,7 +1400,6 @@ describe('Jobs (e2e)', () => {
     it('should filter jobs by status', () => {
       return request(app.getHttpServer())
         .get('/api/jobs?status=QUEUED')
-        .set('Authorization', `Bearer ${accessToken}`)
         .expect(200)
         .expect((res: any) => {
           expect(res.body.jobs).toBeDefined();
@@ -1478,7 +1409,6 @@ describe('Jobs (e2e)', () => {
     it('should filter jobs by type', () => {
       return request(app.getHttpServer())
         .get('/api/jobs?type=image-resize')
-        .set('Authorization', `Bearer ${accessToken}`)
         .expect(200)
         .expect((res: any) => {
           expect(res.body.jobs).toBeDefined();
@@ -1488,15 +1418,10 @@ describe('Jobs (e2e)', () => {
     it('should handle pagination', () => {
       return request(app.getHttpServer())
         .get('/api/jobs?page=1&limit=5')
-        .set('Authorization', `Bearer ${accessToken}`)
         .expect(200)
         .expect((res: any) => {
           expect(res.body.jobs).toBeDefined();
         });
-    });
-
-    it('should fail without authentication', () => {
-      return request(app.getHttpServer()).get('/api/jobs').expect(401);
     });
   });
 
@@ -1506,7 +1431,6 @@ describe('Jobs (e2e)', () => {
     beforeAll(async () => {
       const res = await request(app.getHttpServer())
         .post('/api/jobs')
-        .set('Authorization', `Bearer ${accessToken}`)
         .send({
           type: 'image-resize',
           payload: { imageUrl: 'https://example.com/image.jpg' },
@@ -1518,7 +1442,6 @@ describe('Jobs (e2e)', () => {
     it('should get a specific job by id', () => {
       return request(app.getHttpServer())
         .get(`/api/jobs/${jobId}`)
-        .set('Authorization', `Bearer ${accessToken}`)
         .expect(200)
         .expect((res: any) => {
           expect(res.body).toHaveProperty('id', jobId);
@@ -1529,14 +1452,9 @@ describe('Jobs (e2e)', () => {
         });
     });
 
-    it('should fail without authentication', () => {
-      return request(app.getHttpServer()).get(`/api/jobs/${jobId}`).expect(401);
-    });
-
     it('should fail with invalid job id', () => {
       return request(app.getHttpServer())
         .get('/api/jobs/nonexistent-id')
-        .set('Authorization', `Bearer ${accessToken}`)
         .expect(404);
     });
   });
@@ -1547,7 +1465,6 @@ describe('Jobs (e2e)', () => {
     beforeAll(async () => {
       const res = await request(app.getHttpServer())
         .post('/api/jobs')
-        .set('Authorization', `Bearer ${accessToken}`)
         .send({
           type: 'image-resize',
           payload: { imageUrl: 'https://example.com/image.jpg' },
@@ -1559,7 +1476,6 @@ describe('Jobs (e2e)', () => {
     it('should cancel a job successfully', () => {
       return request(app.getHttpServer())
         .delete(`/api/jobs/${jobId}`)
-        .set('Authorization', `Bearer ${accessToken}`)
         .expect(200)
         .expect((res: any) => {
           expect(res.body).toHaveProperty('status', 'CANCELLED');
@@ -1569,18 +1485,12 @@ describe('Jobs (e2e)', () => {
     it('should fail to cancel already cancelled job', () => {
       return request(app.getHttpServer())
         .delete(`/api/jobs/${jobId}`)
-        .set('Authorization', `Bearer ${accessToken}`)
         .expect(400);
-    });
-
-    it('should fail without authentication', () => {
-      return request(app.getHttpServer()).delete('/api/jobs/some-id').expect(401);
     });
 
     it('should fail with invalid job id', () => {
       return request(app.getHttpServer())
         .delete('/api/jobs/nonexistent-id')
-        .set('Authorization', `Bearer ${accessToken}`)
         .expect(404);
     });
   });
@@ -1618,6 +1528,16 @@ module.exports = {
 EOF
 ```
 
+**Note:** Update the mock in jest.config.js to use `@nestjs/bullmq` instead of `@nestjs/bull`:
+
+```javascript
+// In jest.config.js or test setup
+jest.mock('@nestjs/bullmq', () => ({
+  InjectQueue: () => (target: any, key: string) => {},
+  getQueueToken: (name: string) => `BullQueue_${name}`,
+}));
+```
+
 ---
 
 ## Step 14: Update package.json Test Scripts
@@ -1647,7 +1567,7 @@ cat > apps/api/package.json << 'EOF'
     "test:e2e": "jest --config ./test/jest-e2e.json"
   },
   "dependencies": {
-    "@nestjs/bull": "^10.0.1",
+    "@nestjs/bullmq": "^10.0.1",
     "@nestjs/common": "^10.0.0",
     "@nestjs/config": "^3.0.0",
     "@nestjs/core": "^10.0.0",
@@ -1721,28 +1641,11 @@ npm test -- jobs.e2e-spec.ts
 
 ## Step 16: Manual Testing (Optional)
 
-### Register and Login
-
-```bash
-# Register a user
-curl -X POST http://localhost:3000/api/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "jobtest@example.com",
-    "password": "testpass123",
-    "name": "Job Test"
-  }'
-
-# Save the access token from response
-TOKEN="<your_access_token>"
-```
-
 ### Submit a Job
 
 ```bash
 curl -X POST http://localhost:3000/api/jobs \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
   -d '{
     "type": "image-resize",
     "payload": {
@@ -1759,7 +1662,7 @@ curl -X POST http://localhost:3000/api/jobs \
 {
   "id": "cmpjjz88y0002jswxdhfy71u4",
   "type": "image-resize",
-  "userId": "cmpjjz18g0000jswxj26tt50k",
+  "userId": null,
   "payload": {
     "width": 800,
     "height": 600,
@@ -1783,38 +1686,32 @@ curl -X POST http://localhost:3000/api/jobs \
 ### List Jobs
 
 ```bash
-curl -X GET http://localhost:3000/api/jobs \
-  -H "Authorization: Bearer $TOKEN"
+curl -X GET http://localhost:3000/api/jobs
 ```
 
 ### Get Specific Job
 
 ```bash
-curl -X GET http://localhost:3000/api/jobs/<job_id> \
-  -H "Authorization: Bearer $TOKEN"
+curl -X GET http://localhost:3000/api/jobs/<job_id>
 ```
 
 ### Cancel a Job
 
 ```bash
-curl -X DELETE http://localhost:3000/api/jobs/<job_id> \
-  -H "Authorization: Bearer $TOKEN"
+curl -X DELETE http://localhost:3000/api/jobs/<job_id>
 ```
 
 ### Filter Jobs
 
 ```bash
 # Filter by status
-curl -X GET "http://localhost:3000/api/jobs?status=QUEUED" \
-  -H "Authorization: Bearer $TOKEN"
+curl -X GET "http://localhost:3000/api/jobs?status=QUEUED"
 
 # Filter by type
-curl -X GET "http://localhost:3000/api/jobs?type=image-resize" \
-  -H "Authorization: Bearer $TOKEN"
+curl -X GET "http://localhost:3000/api/jobs?type=image-resize"
 
 # Pagination
-curl -X GET "http://localhost:3000/api/jobs?page=1&limit=10" \
-  -H "Authorization: Bearer $TOKEN"
+curl -X GET "http://localhost:3000/api/jobs?page=1&limit=10"
 ```
 
 ---

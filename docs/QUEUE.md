@@ -185,7 +185,7 @@ export const queueConfig = {
 
 ```typescript
 import { Module } from "@nestjs/common";
-import { BullModule } from "@nestjs/bull";
+import { BullModule } from "@nestjs/bullmq";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 
 @Module({
@@ -195,7 +195,7 @@ import { ConfigModule, ConfigService } from "@nestjs/config";
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
-        redis: {
+        connection: {
           host: configService.get("queue.redis.host"),
           port: configService.get("queue.redis.port"),
           password: configService.get("queue.redis.password"),
@@ -218,7 +218,7 @@ export class QueueModule {}
 
 ```typescript
 import { Module } from "@nestjs/common";
-import { BullModule } from "@nestjs/bull";
+import { BullModule } from "@nestjs/bullmq";
 import { JobsController } from "./jobs.controller";
 import { JobsService } from "./jobs.service";
 import { QueueModule } from "../queue/queue.module";
@@ -276,6 +276,8 @@ PROCESSING (picked by worker)
 
 **Endpoint:** `POST /api/jobs`
 
+**Authentication:** None (public endpoint)
+
 **Request:**
 
 ```json
@@ -298,7 +300,7 @@ PROCESSING (picked by worker)
 {
   "id": "uuid",
   "type": "image-resize",
-  "userId": "uuid",
+  "userId": null,
   "payload": { ... },
   "status": "QUEUED",
   "priority": "normal",
@@ -319,6 +321,8 @@ PROCESSING (picked by worker)
 
 **Endpoint:** `GET /api/jobs/:id`
 
+**Authentication:** None (public endpoint)
+
 **Response (200):**
 
 ```json
@@ -334,6 +338,8 @@ PROCESSING (picked by worker)
 ### List Jobs
 
 **Endpoint:** `GET /api/jobs`
+
+**Authentication:** None (public endpoint)
 
 **Query Parameters:**
 
@@ -351,9 +357,13 @@ PROCESSING (picked by worker)
 }
 ```
 
+**Note:** This endpoint returns all jobs in the system, not filtered by user.
+
 ### Cancel Job
 
 **Endpoint:** `DELETE /api/jobs/:id`
+
+**Authentication:** None (public endpoint)
 
 **Response (200):**
 
@@ -372,7 +382,7 @@ PROCESSING (picked by worker)
 ### Adding Jobs
 
 ```typescript
-import { InjectQueue } from "@nestjs/bull";
+import { InjectQueue } from "@nestjs/bullmq";
 import { Queue } from "bullmq";
 
 @Injectable()
@@ -543,7 +553,7 @@ const mockQueue = {
   remove: jest.fn(),
 };
 
-jest.mock("@nestjs/bull", () => ({
+jest.mock("@nestjs/bullmq", () => ({
   InjectQueue: () => (target: any, key: string) => {},
   getQueueToken: (name: string) => `BullQueue_${name}`,
 }));
@@ -626,21 +636,13 @@ Located in `apps/api/src/main.ts`:
 import { createBullBoard } from "@bull-board/api";
 import { BullMQAdapter } from "@bull-board/api/bullMQAdapter";
 import { ExpressAdapter } from "@bull-board/express";
-import { Queue } from "bullmq";
-import { ConfigService } from "@nestjs/config";
+import { getQueueToken } from "@nestjs/bullmq";
 
 // In bootstrap()
 const serverAdapter = new ExpressAdapter();
 serverAdapter.setBasePath("/admin/queues");
 
-const configService = app.get(ConfigService);
-const jobsQueue = new Queue("jobs", {
-  connection: {
-    host: configService.get("queue.redis.host"),
-    port: configService.get("queue.redis.port"),
-    password: configService.get("queue.redis.password"),
-  },
-});
+const jobsQueue = app.get(getQueueToken("jobs"));
 
 createBullBoard({
   queues: [new BullMQAdapter(jobsQueue, { readOnlyMode: false })],

@@ -5,8 +5,6 @@ import { AppModule } from '../src/app.module';
 
 describe('Jobs (e2e)', () => {
   let app: INestApplication;
-  let accessToken: string;
-  let userId: string;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -17,17 +15,6 @@ describe('Jobs (e2e)', () => {
     app.setGlobalPrefix('api');
     app.useGlobalPipes(new ValidationPipe({ transform: true }));
     await app.init();
-
-    // Register a test user and get token
-    const randomEmail = `jobtest-${Date.now()}@example.com`;
-    const registerRes = await request(app.getHttpServer()).post('/api/auth/register').send({
-      email: randomEmail,
-      password: 'password123',
-      name: 'Job Test User',
-    });
-
-    accessToken = registerRes.body.accessToken;
-    userId = registerRes.body.user.id;
   });
 
   afterAll(async () => {
@@ -38,7 +25,6 @@ describe('Jobs (e2e)', () => {
     it('should create a new job with valid data', () => {
       return request(app.getHttpServer())
         .post('/api/jobs')
-        .set('Authorization', `Bearer ${accessToken}`)
         .send({
           type: 'image-resize',
           payload: {
@@ -52,7 +38,7 @@ describe('Jobs (e2e)', () => {
           expect(res.body).toHaveProperty('id');
           expect(res.body).toHaveProperty('type', 'image-resize');
           expect(res.body).toHaveProperty('status', 'QUEUED');
-          expect(res.body).toHaveProperty('userId', userId);
+          expect(res.body).toHaveProperty('userId');
           expect(res.body).toHaveProperty('payload');
           expect(res.body).toHaveProperty('createdAt');
           expect(res.body).toHaveProperty('priority', 'normal');
@@ -63,7 +49,6 @@ describe('Jobs (e2e)', () => {
     it('should create a job with high priority', () => {
       return request(app.getHttpServer())
         .post('/api/jobs')
-        .set('Authorization', `Bearer ${accessToken}`)
         .send({
           type: 'image-thumbnail',
           payload: { imageUrl: 'https://example.com/image.jpg' },
@@ -78,7 +63,6 @@ describe('Jobs (e2e)', () => {
     it('should create a job with custom timeout', () => {
       return request(app.getHttpServer())
         .post('/api/jobs')
-        .set('Authorization', `Bearer ${accessToken}`)
         .send({
           type: 'image-compress',
           payload: { imageUrl: 'https://example.com/image.jpg' },
@@ -93,7 +77,6 @@ describe('Jobs (e2e)', () => {
     it('should create a job with webhook URL', () => {
       return request(app.getHttpServer())
         .post('/api/jobs')
-        .set('Authorization', `Bearer ${accessToken}`)
         .send({
           type: 'email-send',
           payload: { to: 'recipient@example.com', subject: 'Test' },
@@ -105,20 +88,9 @@ describe('Jobs (e2e)', () => {
         });
     });
 
-    it('should fail without authentication', () => {
-      return request(app.getHttpServer())
-        .post('/api/jobs')
-        .send({
-          type: 'image-resize',
-          payload: { imageUrl: 'https://example.com/image.jpg' },
-        })
-        .expect(401);
-    });
-
     it('should fail with invalid job type', () => {
       return request(app.getHttpServer())
         .post('/api/jobs')
-        .set('Authorization', `Bearer ${accessToken}`)
         .send({
           type: 'invalid-type',
           payload: {},
@@ -129,7 +101,6 @@ describe('Jobs (e2e)', () => {
     it('should fail with missing payload', () => {
       return request(app.getHttpServer())
         .post('/api/jobs')
-        .set('Authorization', `Bearer ${accessToken}`)
         .send({
           type: 'image-resize',
         })
@@ -139,7 +110,6 @@ describe('Jobs (e2e)', () => {
     it('should fail with invalid priority', () => {
       return request(app.getHttpServer())
         .post('/api/jobs')
-        .set('Authorization', `Bearer ${accessToken}`)
         .send({
           type: 'image-resize',
           payload: {},
@@ -151,7 +121,6 @@ describe('Jobs (e2e)', () => {
     it('should fail with timeout too low', () => {
       return request(app.getHttpServer())
         .post('/api/jobs')
-        .set('Authorization', `Bearer ${accessToken}`)
         .send({
           type: 'image-resize',
           payload: {},
@@ -163,7 +132,6 @@ describe('Jobs (e2e)', () => {
     it('should fail with timeout too high', () => {
       return request(app.getHttpServer())
         .post('/api/jobs')
-        .set('Authorization', `Bearer ${accessToken}`)
         .send({
           type: 'image-resize',
           payload: {},
@@ -177,17 +145,15 @@ describe('Jobs (e2e)', () => {
     beforeAll(async () => {
       await request(app.getHttpServer())
         .post('/api/jobs')
-        .set('Authorization', `Bearer ${accessToken}`)
         .send({
           type: 'image-resize',
           payload: { imageUrl: 'https://example.com/image.jpg' },
         });
     });
 
-    it('should list all jobs for authenticated user', () => {
+    it('should list all jobs', () => {
       return request(app.getHttpServer())
         .get('/api/jobs')
-        .set('Authorization', `Bearer ${accessToken}`)
         .expect(200)
         .expect((res: any) => {
           expect(res.body).toHaveProperty('jobs');
@@ -200,7 +166,6 @@ describe('Jobs (e2e)', () => {
     it('should filter jobs by status', () => {
       return request(app.getHttpServer())
         .get('/api/jobs?status=QUEUED')
-        .set('Authorization', `Bearer ${accessToken}`)
         .expect(200)
         .expect((res: any) => {
           expect(res.body.jobs).toBeDefined();
@@ -210,7 +175,6 @@ describe('Jobs (e2e)', () => {
     it('should filter jobs by type', () => {
       return request(app.getHttpServer())
         .get('/api/jobs?type=image-resize')
-        .set('Authorization', `Bearer ${accessToken}`)
         .expect(200)
         .expect((res: any) => {
           expect(res.body.jobs).toBeDefined();
@@ -220,15 +184,10 @@ describe('Jobs (e2e)', () => {
     it('should handle pagination', () => {
       return request(app.getHttpServer())
         .get('/api/jobs?page=1&limit=5')
-        .set('Authorization', `Bearer ${accessToken}`)
         .expect(200)
         .expect((res: any) => {
           expect(res.body.jobs).toBeDefined();
         });
-    });
-
-    it('should fail without authentication', () => {
-      return request(app.getHttpServer()).get('/api/jobs').expect(401);
     });
   });
 
@@ -238,7 +197,6 @@ describe('Jobs (e2e)', () => {
     beforeAll(async () => {
       const res = await request(app.getHttpServer())
         .post('/api/jobs')
-        .set('Authorization', `Bearer ${accessToken}`)
         .send({
           type: 'image-resize',
           payload: { imageUrl: 'https://example.com/image.jpg' },
@@ -250,7 +208,6 @@ describe('Jobs (e2e)', () => {
     it('should get a specific job by id', () => {
       return request(app.getHttpServer())
         .get(`/api/jobs/${jobId}`)
-        .set('Authorization', `Bearer ${accessToken}`)
         .expect(200)
         .expect((res: any) => {
           expect(res.body).toHaveProperty('id', jobId);
@@ -261,15 +218,8 @@ describe('Jobs (e2e)', () => {
         });
     });
 
-    it('should fail without authentication', () => {
-      return request(app.getHttpServer()).get(`/api/jobs/${jobId}`).expect(401);
-    });
-
     it('should fail with invalid job id', () => {
-      return request(app.getHttpServer())
-        .get('/api/jobs/nonexistent-id')
-        .set('Authorization', `Bearer ${accessToken}`)
-        .expect(404);
+      return request(app.getHttpServer()).get('/api/jobs/nonexistent-id').expect(404);
     });
   });
 
@@ -279,7 +229,6 @@ describe('Jobs (e2e)', () => {
     beforeAll(async () => {
       const res = await request(app.getHttpServer())
         .post('/api/jobs')
-        .set('Authorization', `Bearer ${accessToken}`)
         .send({
           type: 'image-resize',
           payload: { imageUrl: 'https://example.com/image.jpg' },
@@ -291,7 +240,6 @@ describe('Jobs (e2e)', () => {
     it('should cancel a job successfully', () => {
       return request(app.getHttpServer())
         .delete(`/api/jobs/${jobId}`)
-        .set('Authorization', `Bearer ${accessToken}`)
         .expect(200)
         .expect((res: any) => {
           expect(res.body).toHaveProperty('status', 'CANCELLED');
@@ -299,21 +247,11 @@ describe('Jobs (e2e)', () => {
     });
 
     it('should fail to cancel already cancelled job', () => {
-      return request(app.getHttpServer())
-        .delete(`/api/jobs/${jobId}`)
-        .set('Authorization', `Bearer ${accessToken}`)
-        .expect(400);
-    });
-
-    it('should fail without authentication', () => {
-      return request(app.getHttpServer()).delete('/api/jobs/some-id').expect(401);
+      return request(app.getHttpServer()).delete(`/api/jobs/${jobId}`).expect(400);
     });
 
     it('should fail with invalid job id', () => {
-      return request(app.getHttpServer())
-        .delete('/api/jobs/nonexistent-id')
-        .set('Authorization', `Bearer ${accessToken}`)
-        .expect(404);
+      return request(app.getHttpServer()).delete('/api/jobs/nonexistent-id').expect(404);
     });
   });
 });

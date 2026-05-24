@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { InjectQueue } from '@nestjs/bull';
+import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { PrismaService } from '@systemvibe/database';
 import { CreateJobDto } from './dto/create-job.dto';
@@ -13,12 +13,12 @@ export class JobsService {
     @InjectQueue('jobs') private jobsQueue: Queue
   ) {}
 
-  async create(userId: string, createJobDto: CreateJobDto): Promise<JobResponseDto> {
-    // Create job in database
+  async create(createJobDto: CreateJobDto): Promise<JobResponseDto> {
+    // Create job in database without userId (public job)
     const job = await this.prisma.job.create({
       data: {
         type: createJobDto.type,
-        userId,
+        userId: null,
         payload: createJobDto.payload as any,
         priority: createJobDto.priority || 'normal',
         timeout: createJobDto.timeout || 3600,
@@ -55,7 +55,7 @@ export class JobsService {
     return this.toJobResponseDto(updatedJob);
   }
 
-  async findOne(id: string, userId: string): Promise<JobResponseDto> {
+  async findOne(id: string): Promise<JobResponseDto> {
     const job = await this.prisma.job.findUnique({
       where: { id },
     });
@@ -64,24 +64,14 @@ export class JobsService {
       throw new NotFoundException(`Job with ID ${id} not found`);
     }
 
-    // Check if user owns this job
-    if (job.userId !== userId) {
-      throw new BadRequestException('You do not have permission to access this job');
-    }
-
     return this.toJobResponseDto(job);
   }
 
-  async findAll(
-    userId: string,
-    filterDto: FilterJobsDto
-  ): Promise<{ jobs: JobResponseDto[]; total: number }> {
+  async findAll(filterDto: FilterJobsDto): Promise<{ jobs: JobResponseDto[]; total: number }> {
     const { status, type, page = 1, limit = 20 } = filterDto;
     const skip = (Number(page) - 1) * Number(limit);
 
-    const where: Record<string, unknown> = {
-      userId,
-    };
+    const where: Record<string, unknown> = {};
 
     if (status) {
       where.status = status;
@@ -107,17 +97,13 @@ export class JobsService {
     };
   }
 
-  async cancel(id: string, userId: string): Promise<JobResponseDto> {
+  async cancel(id: string): Promise<JobResponseDto> {
     const job = await this.prisma.job.findUnique({
       where: { id },
     });
 
     if (!job) {
       throw new NotFoundException(`Job with ID ${id} not found`);
-    }
-
-    if (job.userId !== userId) {
-      throw new BadRequestException('You do not have permission to cancel this job');
     }
 
     if (

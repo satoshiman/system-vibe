@@ -6,8 +6,7 @@ import * as dotenv from 'dotenv';
 import { createBullBoard } from '@bull-board/api';
 import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
 import { ExpressAdapter } from '@bull-board/express';
-import { Queue } from 'bullmq';
-import { ConfigService } from '@nestjs/config';
+import { getQueueToken } from '@nestjs/bullmq';
 
 // Load .env from root directory (assumes running from project root)
 dotenv.config();
@@ -47,14 +46,7 @@ async function bootstrap() {
   const serverAdapter = new ExpressAdapter();
   serverAdapter.setBasePath('/admin/queues');
 
-  const configService = app.get(ConfigService);
-  const jobsQueue = new Queue('jobs', {
-    connection: {
-      host: configService.get('queue.redis.host'),
-      port: configService.get('queue.redis.port'),
-      password: configService.get('queue.redis.password'),
-    },
-  });
+  const jobsQueue = app.get(getQueueToken('jobs'));
 
   createBullBoard({
     queues: [new BullMQAdapter(jobsQueue, { readOnlyMode: false })],
