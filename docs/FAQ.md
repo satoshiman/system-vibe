@@ -168,51 +168,82 @@ docker exec systemvibe-redis redis-cli ping
 
 </details>
 
+<details>
+<summary>When is refresh token rotation triggered from the client?</summary>
+
+Refresh token rotation is triggered from the client in the following scenarios:
+
+**1. Access token expired**
+
+- When API returns 401 Unauthorized, client calls `/auth/refresh` endpoint with current refresh token to get a new token pair
+
+**2. Proactive refresh**
+
+- Client can refresh before access token expires (e.g., when access token has 5 minutes remaining) to avoid user experience interruption
+
+**3. User activity detected**
+
+- When user interacts with app after long inactive period, client can refresh tokens to extend session
+
+**Client-side flow:**
+
+- Client stores both `accessToken` and `refreshToken` (typically in localStorage/cookies)
+- When refresh is needed, client sends POST request to `/auth/refresh` with body `{ refreshToken: "..." }`
+- Server returns new token pair `{ accessToken, refreshToken }`
+- Client **replaces** both old tokens with new tokens (does not keep old token)
+
+**Important notes:**
+
+- Only 1 refresh token is valid at a time (due to rotation)
+- If an old refresh token is reused after rotation, server will reject it (implemented at line 101 in auth.service.ts)
+
+</details>
+
 ## Testing
 
 <details>
-<summary>Việc viết test có tiêu chí gì không?</summary>
+<summary>What are the criteria for writing tests?</summary>
 
-Việc viết test trong SystemVibe tuân theo các tiêu chí sau:
+Writing tests in SystemVibe follows these criteria:
 
-**1. Cấu trúc test (AAA Pattern)**
+**1. Test Structure (AAA Pattern)**
 
-- **Arrange**: Chuẩn bị dữ liệu và điều kiện test
-- **Act**: Thực thi code cần test
-- **Assert**: Kiểm tra kết quả
+- **Arrange**: Prepare test data and conditions
+- **Act**: Execute the code being tested
+- **Assert**: Verify the results
 
-**2. Quy tắc đặt tên**
+**2. Naming conventions**
 
-- File test: `*.spec.ts` (unit), `*.e2e-spec.ts` (E2E)
-- Mô tả test: "should [hành vi mong đợi] when [điều kiện]"
-- Ví dụ: "should return 401 when token is invalid"
+- Test files: `*.spec.ts` (unit), `*.e2e-spec.ts` (E2E)
+- Test description: "should [expected behavior] when [condition]"
+- Example: "should return 401 when token is invalid"
 
-**3. Một assertion mỗi test**
+**3. One assertion per test**
 
-- Mỗi test chỉ nên kiểm tra một điều kiện
-- Tách các test case riêng biệt để dễ debug
+- Each test should check only one condition
+- Separate test cases for easier debugging
 
-**4. Độc lập giữa các test**
+**4. Test independence**
 
-- Mỗi test không được phụ thuộc vào test khác
-- Không chia sẻ state giữa các test
+- Each test must not depend on other tests
+- Do not share state between tests
 
-**5. Sử dụng dữ liệu ngẫu nhiên**
+**5. Use random data**
 
-- Dùng `Date.now()` hoặc random string để tránh xung đột dữ liệu
-- Đảm bảo test có thể chạy lặp lại mà không lỗi
+- Use `Date.now()` or random strings to avoid data conflicts
+- Ensure tests can run repeatedly without errors
 
 **6. Mock external dependencies**
 
-- Unit test không được kết nối database, network, file system
-- Mock database, Redis, external services trong unit test
+- Unit tests must not connect to database, network, or file system
+- Mock database, Redis, external services in unit tests
 
-**7. Tỷ lệ test (Test Pyramid)**
+**7. Test ratio (Test Pyramid)**
 
 - 70% Unit tests
 - 20% Integration tests
 - 10% E2E tests
 
-Xem chi tiết tại [docs/TEST.md](./TEST.md)
+See details at [docs/TEST.md](./TEST.md)
 
 </details>
