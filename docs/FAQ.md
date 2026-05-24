@@ -199,6 +199,58 @@ Refresh token rotation is triggered from the client in the following scenarios:
 
 </details>
 
+## Redis & Queue
+
+<details>
+<summary>What happens when Redis is restarted in SystemVibe?</summary>
+
+With the current setup in `docker-compose.yml`, Redis is configured with AOF persistence:
+
+```yaml
+redis:
+  image: redis:7-alpine
+  command: redis-server --appendonly yes
+  volumes:
+    - redis_data:/data
+```
+
+**When Redis restarts:**
+
+1. **AOF Persistence Behavior**
+   - Redis writes every write operation to `appendonly.aof` file
+   - Data is persisted to volume `redis_data`
+   - On restart, Redis recovers data from AOF file
+
+2. **Potential Job Loss**
+   - Default `appendfsync everysec` → can lose up to 1 second of data before restart
+   - If Redis crashes hard (kill -9), data in the last second may be lost
+   - BullMQ does not guarantee durability even with Redis persistence
+
+3. **PostgreSQL Jobs Remain Safe**
+   - Job entities are stored in PostgreSQL
+   - PostgreSQL has volume persistence
+   - Jobs in database are not lost
+
+4. **After Restart**
+   - Redis recovers from AOF (may lose some recent jobs)
+   - BullMQ queue is recreated (may be empty or partial)
+   - API server automatically reconnects to Redis
+   - Workers can reconnect and start processing new jobs
+
+**Conclusion with current setup:**
+
+- **Does not guarantee 100% jobs survive Redis restart**
+- Jobs in PostgreSQL are the safer source of truth
+- Job recovery mechanism should be implemented to re-enqueue jobs from DB after Redis restart
+
+**Recommended Improvements:**
+
+1. Implement job recovery: scan DB for jobs stuck in `QUEUED` status and re-enqueue
+2. Configure stronger Redis persistence: enable both AOF and RDB
+3. Use `appendfsync always` for maximum durability (slower but safer)
+
+</details>
+
 ## Testing
 
 <details>
