@@ -1049,6 +1049,7 @@ DELETE /jobs/{id}               # Cancel job (if not started)
 - [x] E2E tests (22 tests for JobsController)
 - [x] Jest configuration for testing
 - [x] Test scripts in package.json
+- [x] BullMQ Board UI dashboard for queue monitoring (http://localhost:3000/admin/queues)
 
 **Learning**:
 

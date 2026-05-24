@@ -1,12 +1,16 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { Client } from 'pg';
 import Redis from 'ioredis';
+import { InjectQueue } from '@nestjs/bull';
+import { Queue } from 'bullmq';
 
 @Injectable()
 export class HealthService implements OnModuleInit, OnModuleDestroy {
   private dbClient!: Client;
   private redisClient!: Redis;
   private dbConnected = false;
+
+  constructor(@InjectQueue('jobs') private jobsQueue: Queue) {}
 
   async onModuleInit() {
     this.dbClient = new Client({
@@ -32,6 +36,7 @@ export class HealthService implements OnModuleInit, OnModuleDestroy {
   async getHealth() {
     let dbStatus = 'unknown';
     let redisStatus = 'unknown';
+    let queueStatus = 'unknown';
     const authStatus = 'healthy';
 
     try {
@@ -54,8 +59,18 @@ export class HealthService implements OnModuleInit, OnModuleDestroy {
       redisStatus = 'unhealthy';
     }
 
+    try {
+      await this.jobsQueue.getJobCounts();
+      queueStatus = 'healthy';
+    } catch (error) {
+      console.error('Queue health check error:', error);
+      queueStatus = 'unhealthy';
+    }
+
     const overallStatus =
-      dbStatus === 'healthy' && redisStatus === 'healthy' ? 'healthy' : 'degraded';
+      dbStatus === 'healthy' && redisStatus === 'healthy' && queueStatus === 'healthy'
+        ? 'healthy'
+        : 'degraded';
 
     return {
       status: overallStatus,
@@ -64,9 +79,10 @@ export class HealthService implements OnModuleInit, OnModuleDestroy {
         api: 'healthy',
         database: dbStatus,
         redis: redisStatus,
+        queue: queueStatus,
         auth: authStatus,
       },
-      version: '0.2.0',
+      version: '0.3.0',
     };
   }
 }

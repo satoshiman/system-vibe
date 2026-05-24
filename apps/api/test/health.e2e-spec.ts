@@ -32,6 +32,8 @@ describe('Health (e2e)', () => {
           expect(res.body.services).toHaveProperty('api');
           expect(res.body.services).toHaveProperty('database');
           expect(res.body.services).toHaveProperty('redis');
+          expect(res.body.services).toHaveProperty('queue');
+          expect(res.body.services).toHaveProperty('auth');
           expect(res.body).toHaveProperty('version');
         });
     });

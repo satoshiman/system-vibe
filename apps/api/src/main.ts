@@ -3,6 +3,11 @@ import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import pino from 'pino';
 import * as dotenv from 'dotenv';
+import { createBullBoard } from '@bull-board/api';
+import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
+import { ExpressAdapter } from '@bull-board/express';
+import { Queue } from 'bullmq';
+import { ConfigService } from '@nestjs/config';
 
 // Load .env from root directory (assumes running from project root)
 dotenv.config();
@@ -38,11 +43,32 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document);
 
+  // BullMQ Board setup
+  const serverAdapter = new ExpressAdapter();
+  serverAdapter.setBasePath('/admin/queues');
+
+  const configService = app.get(ConfigService);
+  const jobsQueue = new Queue('jobs', {
+    connection: {
+      host: configService.get('queue.redis.host'),
+      port: configService.get('queue.redis.port'),
+      password: configService.get('queue.redis.password'),
+    },
+  });
+
+  createBullBoard({
+    queues: [new BullMQAdapter(jobsQueue, { readOnlyMode: false })],
+    serverAdapter,
+  });
+
+  app.use('/admin/queues', serverAdapter.getRouter());
+
   const port = process.env.API_PORT || 3000;
   await app.listen(port, '0.0.0.0');
 
   logger.info(`API Server running on http://localhost:${port}`);
   logger.info(`Swagger documentation available at http://localhost:${port}/api/docs`);
+  logger.info(`BullMQ Board available at http://localhost:${port}/admin/queues`);
 }
 
 bootstrap().catch((err) => {
