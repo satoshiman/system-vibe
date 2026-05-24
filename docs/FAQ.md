@@ -74,3 +74,96 @@ For SystemVibe, JWT should be stored in **HttpOnly Cookies** rather than localSt
 - You're implementing additional XSS mitigation (CSP, input sanitization)
 
 </details>
+
+<details>
+<summary>How to debug Redis in SystemVibe?</summary>
+
+**1. Redis CLI (Quickest)**
+
+```bash
+# Connect to Redis container
+docker exec -it systemvibe-redis redis-cli
+
+# Or from host
+redis-cli -h localhost -p 6379
+
+# List all keys
+KEYS *
+
+# Get value by key
+GET your_key_name
+
+# Get all hash fields
+HGETALL your_hash_name
+
+# Monitor real-time commands
+MONITOR
+```
+
+**2. RedisInsight (Recommended GUI)**
+
+```bash
+# Download RedisInsight: https://redis.com/redis-enterprise/redis-insight/
+# Or run with Docker
+docker run -v redisinsight:/db -p 8001:8001 redislabs/redisinsight:latest
+```
+
+- Open http://localhost:8001
+- Connect to: `localhost:6379`
+- Browse all keys, values, and monitor commands
+
+**3. Debug in NestJS Code**
+
+```typescript
+// Add logging to packages/redis/src/index.ts
+redisClient.on("connect", () => {
+  console.log("Redis connected successfully");
+});
+
+// In service using Redis
+this.logger.debug(`SET ${key}: ${value}`);
+this.logger.debug(`GET ${key}: ${result}`);
+```
+
+**4. Debug Endpoint (Development only)**
+
+```typescript
+@Get('debug/redis')
+async debugRedis() {
+  const redis = getRedisClient();
+  const keys = await redis.keys('*');
+  const data = {};
+  for (const key of keys) {
+    const type = await redis.type(key);
+    if (type === 'string') {
+      data[key] = await redis.get(key);
+    } else if (type === 'hash') {
+      data[key] = await redis.hgetall(key);
+    }
+  }
+  return data;
+}
+```
+
+**5. Check Connection Status**
+
+```bash
+# Check if Redis container is running
+docker ps | grep systemvibe-redis
+
+# Check Redis logs
+docker logs systemvibe-redis
+
+# Test connection
+docker exec systemvibe-redis redis-cli ping
+# Should return: PONG
+```
+
+**SystemVibe Specific Notes:**
+
+- Redis runs on port `6379` of host
+- Container name: `systemvibe-redis`
+- API connects via internal network: `redis://redis:6379`
+- Local development: `redis://localhost:6379`
+
+</details>
