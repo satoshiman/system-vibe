@@ -2,7 +2,8 @@
 
 ## Architecture & Design Decisions
 
-### Why organize Redis as a separate package?
+<details>
+<summary>Why organize Redis as a separate package?</summary>
 
 Organizing Redis as a separate package (`@systemvibe/redis`) in the monorepo provides the following benefits:
 
@@ -39,7 +40,10 @@ Organizing Redis as a separate package (`@systemvibe/redis`) in the monorepo pro
 
 In monorepo architecture, this pattern is typically applied to shared services: database, cache, message queue, logging, etc.
 
-### Where should JWT be stored: localStorage or Cookie?
+</details>
+
+<details>
+<summary>Where should JWT be stored: localStorage or Cookie?</summary>
 
 For SystemVibe, JWT should be stored in **HttpOnly Cookies** rather than localStorage.
 
@@ -68,3 +72,5 @@ For SystemVibe, JWT should be stored in **HttpOnly Cookies** rather than localSt
 - Your app has zero XSS risk (rare)
 - You need token access from multiple subdomains
 - You're implementing additional XSS mitigation (CSP, input sanitization)
+
+</details>
