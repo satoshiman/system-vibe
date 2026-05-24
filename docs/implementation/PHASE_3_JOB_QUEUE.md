@@ -547,7 +547,7 @@ export class JobsService {
 
   private getPriorityValue(priority: string): number {
     const priorityMap: Record<string, number> = {
-      low: 5,
+      low: 20,
       normal: 10,
       high: 1,
     };
@@ -1716,7 +1716,7 @@ curl -X GET "http://localhost:3000/api/jobs?page=1&limit=10"
 
 ---
 
-## Step 11: Verify BullMQ Queue
+## Step 17: Verify BullMQ Queue
 
 ```bash
 # Access Redis CLI
@@ -1829,7 +1829,7 @@ HGETALL bull:jobs:<job_id>
 // Priority mapping (lower number = higher priority)
 high: 1    → Processed first
 normal: 10 → Processed second
-low: 5     → Processed last
+low: 20    → Processed last
 
 // Example queue order:
 [high-priority-job-1, high-priority-job-2, normal-job-1, low-job-1, normal-job-2]
@@ -1940,20 +1940,16 @@ You're ready for **Phase 4: Single Worker Type**:
 # Submit job
 curl -X POST http://localhost:3000/api/jobs \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
   -d '{"type":"image-resize","payload":{"url":"...","width":800,"height":600}}'
 
 # List jobs
-curl -X GET http://localhost:3000/api/jobs \
-  -H "Authorization: Bearer $TOKEN"
+curl -X GET http://localhost:3000/api/jobs
 
 # Get job
-curl -X GET http://localhost:3000/api/jobs/<id> \
-  -H "Authorization: Bearer $TOKEN"
+curl -X GET http://localhost:3000/api/jobs/<id>
 
 # Cancel job
-curl -X DELETE http://localhost:3000/api/jobs/<id> \
-  -H "Authorization: Bearer $TOKEN"
+curl -X DELETE http://localhost:3000/api/jobs/<id>
 
 # Check Redis queue
 docker exec systemvibe-redis redis-cli KEYS "bull:jobs:*"
@@ -1969,12 +1965,12 @@ open http://localhost:3000/api/docs
 
 ## API Endpoints Summary
 
-| Method | Endpoint      | Auth     | Description                 |
-| ------ | ------------- | -------- | --------------------------- |
-| POST   | /api/jobs     | Required | Submit new job              |
-| GET    | /api/jobs     | Required | List user jobs with filters |
-| GET    | /api/jobs/:id | Required | Get specific job            |
-| DELETE | /api/jobs/:id | Required | Cancel job                  |
+| Method | Endpoint      | Auth | Description                |
+| ------ | ------------- | ---- | -------------------------- |
+| POST   | /api/jobs     | None | Submit new job             |
+| GET    | /api/jobs     | None | List all jobs with filters |
+| GET    | /api/jobs/:id | None | Get specific job           |
+| DELETE | /api/jobs/:id | None | Cancel job                 |
 
 **Query Parameters (GET /api/jobs):**
 

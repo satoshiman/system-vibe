@@ -412,7 +412,7 @@ export class JobsService {
 
   private getPriorityValue(priority: string): number {
     const priorityMap: Record<string, number> = {
-      low: 5,
+      low: 20,
       normal: 10,
       high: 1,
     };
@@ -423,11 +423,11 @@ export class JobsService {
 
 ### Priority Levels
 
-| Priority | BullMQ Value | Description            |
-| -------- | ------------ | ---------------------- |
-| `high`   | 1            | Processed first        |
-| `normal` | 10           | Default priority       |
-| `low`    | 5            | Processed after normal |
+| Priority | BullMQ Value | Description      |
+| -------- | ------------ | ---------------- |
+| `high`   | 1            | Processed first  |
+| `normal` | 10           | Default priority |
+| `low`    | 20           | Processed last   |
 
 ### Retry Logic
 

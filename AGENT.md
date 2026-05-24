@@ -1314,7 +1314,7 @@ CREATE TABLE "user" (
 -- Jobs table
 CREATE TABLE "job" (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  userId UUID NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+  userId UUID REFERENCES "user"(id) ON DELETE CASCADE,
 
   -- Job metadata
   type VARCHAR(50) NOT NULL,  -- "image-resize", "video-transcode", etc
