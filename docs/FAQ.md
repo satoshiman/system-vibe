@@ -1093,6 +1093,120 @@ try {
 
 </details>
 
+<details>
+<summary>What does the startHeartbeat() method do in the worker?</summary>
+
+The `startHeartbeat()` method in `apps/worker-image/src/image.processor.ts` sends periodic heartbeat signals to indicate the worker is still alive and operational.
+
+**Implementation details:**
+
+- **Frequency**: Sends heartbeat every 10 seconds (line 167: `setInterval` with 10000ms)
+- **Storage**: Stores heartbeat data in Redis with key `worker:heartbeat:{WORKER_ID}` (line 170)
+- **TTL**: Key expires after 30 seconds (line 178: `HEARTBEAT_TTL = 30`)
+- **Worker ID**: Generated from Docker's HOSTNAME environment variable (line 23)
+
+**Heartbeat data sent (lines 171-176):**
+
+```json
+{
+  "workerId": "worker-image-{containerId}",
+  "type": "image",
+  "timestamp": "2026-05-25T09:30:00Z",
+  "status": "active"
+}
+```
+
+**Purpose:**
+
+- **Health monitoring**: Allows the system to detect if a worker has crashed or stopped
+- **Fault detection**: If the heartbeat key expires (no update for 30s), the system knows the worker is dead
+- **Worker tracking**: Tracks which workers are active and their last activity time
+- **Recovery trigger**: Can trigger recovery mechanisms when a worker fails
+
+**How it works:**
+
+1. Worker starts and calls `startHeartbeat()` in constructor (line 63)
+2. Every 10 seconds, the interval callback updates the Redis key with current timestamp
+3. Redis automatically expires the key after 30 seconds if not updated
+4. If the worker crashes, the key expires → monitoring system detects failure
+5. When worker shuts down gracefully, `stopHeartbeat()` is called to clear the interval (line 189)
+
+**Why 10s interval with 30s TTL:**
+
+- 3x safety margin: Worker can miss 2 heartbeat updates before being considered dead
+- Accounts for network delays or temporary Redis issues
+- Balances detection speed with Redis load
+
+</details>
+
+<details>
+<summary>Does BullMQ use the custom heartbeat for job coordination?</summary>
+
+No, the custom heartbeat in `startHeartbeat()` is a **SystemVibe-specific implementation**, not part of BullMQ. BullMQ has its own separate worker registration mechanism.
+
+**Difference between the two:**
+
+**1. Custom Heartbeat (SystemVibe)**
+
+- Key: `worker:heartbeat:{WORKER_ID}`
+- Purpose: Monitoring, fault detection, recovery triggers
+- Not used by BullMQ for job coordination
+- Implemented manually in `image.processor.ts`
+
+**2. BullMQ Worker Tracking**
+
+- Automatic: BullMQ tracks workers through active Redis connections
+- Storage: Does NOT store worker metadata in persistent Redis keys
+- Purpose: Job coordination, load balancing among workers
+- Built-in to BullMQ framework
+
+**How BullMQ actually tracks workers:**
+
+BullMQ does NOT store worker metadata in persistent Redis keys like `bull:image:workers:*`. Instead:
+
+1. **Connection-based tracking**: Workers are tracked through active Redis connections
+2. **Runtime registry**: Worker registry exists only in memory of BullMQ instances
+3. **getWorkers() method**: When calling `this.imageQueue.getWorkers()`, BullMQ queries active Redis connections, not persistent keys
+4. **Ephemeral**: Worker tracking is ephemeral - if a worker disconnects, it's immediately removed from the registry
+
+**What `bull:image:*` actually contains:**
+
+The `bull:image:*` keys in Redis store job data only, not worker metadata:
+
+- `bull:image:wait` - Jobs waiting to be processed (sorted set)
+- `bull:image:active` - Jobs currently being processed (list)
+- `bull:image:completed` - Jobs that finished successfully (list)
+- `bull:image:failed` - Jobs that failed (list)
+- `bull:image:jobs:{jobId}` - Individual job data (hash)
+- `bull:image:meta` - Queue metadata (hash)
+- `bull:image:id` - Job ID counter
+- `bull:image:events` - Job events stream
+
+**How BullMQ coordinates jobs:**
+
+BullMQ coordinates jobs using:
+
+- Active Redis connections to detect available workers
+- Queue data structures (wait, active, completed, failed) to manage job state
+- Built-in polling mechanism (BRPOPLPUSH) to distribute jobs
+- No persistent worker registry needed
+
+**Why SystemVibe has custom heartbeat:**
+
+- BullMQ does not provide a built-in persistent heartbeat mechanism
+- Custom heartbeat enables monitoring and fault detection
+- Can trigger recovery mechanisms when workers fail
+- Provides visibility into worker health beyond BullMQ's ephemeral connection tracking
+
+**Summary:**
+
+- BullMQ tracks workers through active Redis connections (ephemeral, not persistent)
+- `bull:image:*` keys store job data only, not worker metadata
+- Custom heartbeat is for monitoring, not job distribution
+- Both mechanisms serve different purposes and operate independently
+
+</details>
+
 ## Testing
 
 <details>
