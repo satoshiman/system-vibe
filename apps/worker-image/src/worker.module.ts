@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { BullModule } from "@nestjs/bullmq";
 import { ImageProcessor } from "./image.processor";
 import { RedisConfigService } from "./redis-config.service";
+import { PrismaService } from "@systemvibe/database";
 
 @Module({
   imports: [
@@ -13,6 +14,6 @@ import { RedisConfigService } from "./redis-config.service";
       name: "image",
     }),
   ],
-  providers: [ImageProcessor, RedisConfigService],
+  providers: [ImageProcessor, RedisConfigService, PrismaService],
 })
 export class WorkerModule {}

@@ -37,6 +37,10 @@ async function bootstrap() {
 }
 
 bootstrap().catch((error) => {
-  logger.error("Failed to start Image Worker", error);
+  logger.error("Failed to start Image Worker", {
+    message: error.message,
+    stack: error.stack,
+    ...error,
+  });
   process.exit(1);
 });

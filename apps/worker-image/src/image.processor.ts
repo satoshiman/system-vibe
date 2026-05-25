@@ -4,6 +4,8 @@ import sharp from "sharp";
 import pino from "pino";
 import getRedisClient from "@systemvibe/redis";
 import { env } from "@systemvibe/config";
+import { PrismaService } from "@systemvibe/database";
+import { Injectable } from "@nestjs/common";
 
 const logger = pino({
   level: env.LOG_LEVEL,
@@ -51,32 +53,114 @@ interface ImageCompressJob {
 }
 
 @Processor("image")
+@Injectable()
 export class ImageProcessor extends WorkerHost {
   private heartbeatInterval: NodeJS.Timeout;
 
-  constructor() {
+  constructor(private prisma: PrismaService) {
     super();
     logger.info("ImageProcessor initialized");
     this.startHeartbeat();
   }
 
   @OnWorkerEvent("active")
-  onActive(job: Job) {
+  async onActive(job: Job) {
     logger.info(`Job started processing`, { jobId: job.id, name: job.name });
+
+    // Update job status in database
+    try {
+      await this.prisma.job.update({
+        where: { id: job.id },
+        data: {
+          status: "PROCESSING",
+          startedAt: new Date(),
+        },
+      });
+    } catch (error) {
+      logger.error("Failed to update job status in database", {
+        jobId: job.id,
+        error: (error as Error).message,
+      });
+    }
+
+    // Publish job status to Redis Pub/Sub
+    await redis.publish(
+      "job:status",
+      JSON.stringify({
+        jobId: job.id,
+        status: "PROCESSING",
+      }),
+    );
   }
 
   @OnWorkerEvent("completed")
-  onCompleted(job: Job, result: any) {
+  async onCompleted(job: Job, result: any) {
     logger.info(`Job completed`, { jobId: job.id, name: job.name, result });
+
+    // Update job status in database
+    try {
+      await this.prisma.job.update({
+        where: { id: job.id },
+        data: {
+          status: "COMPLETED",
+          completedAt: new Date(),
+          result: result as any,
+        },
+      });
+    } catch (error) {
+      logger.error("Failed to update job status in database", {
+        jobId: job.id,
+        error: (error as Error).message,
+      });
+    }
+
+    // Publish job status to Redis Pub/Sub
+    await redis.publish(
+      "job:status",
+      JSON.stringify({
+        jobId: job.id,
+        status: "COMPLETED",
+        result,
+      }),
+    );
   }
 
   @OnWorkerEvent("failed")
-  onFailed(job: Job, error: Error) {
+  async onFailed(job: Job, error: Error) {
     logger.error(`Job failed`, {
       jobId: job?.id,
       name: job?.name,
       error: error.message,
     });
+
+    // Update job status in database
+    if (job?.id) {
+      try {
+        await this.prisma.job.update({
+          where: { id: job.id },
+          data: {
+            status: "FAILED",
+            error: error.message,
+            attemptCount: { increment: 1 },
+          },
+        });
+      } catch (dbError) {
+        logger.error("Failed to update job status in database", {
+          jobId: job.id,
+          error: (dbError as Error).message,
+        });
+      }
+
+      // Publish job status to Redis Pub/Sub
+      await redis.publish(
+        "job:status",
+        JSON.stringify({
+          jobId: job.id,
+          status: "FAILED",
+          error: error.message,
+        }),
+      );
+    }
   }
 
   private startHeartbeat() {

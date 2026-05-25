@@ -4,7 +4,8 @@ FROM node:20-alpine AS builder
 RUN apk add --no-cache \
     vips-dev \
     build-base \
-    pkgconfig
+    pkgconfig \
+    openssl-dev
 
 WORKDIR /app
 
@@ -14,6 +15,7 @@ COPY package.json package-lock.json ./
 # Copy workspace packages
 COPY packages/config ./packages/config
 COPY packages/database ./packages/database
+COPY packages/database/prisma ./packages/database/prisma
 COPY packages/redis ./packages/redis
 
 # Copy worker-image app
@@ -27,14 +29,18 @@ RUN npm install
 # Install worker-image specific dependencies
 RUN npm install --workspace=apps/worker-image
 
+# Generate Prisma client
+RUN npx prisma generate --schema=packages/database/prisma/schema.prisma
+
 # Build TypeScript
 RUN npm run build --workspace=apps/worker-image
 
-FROM node:20-alpine
+FROM node:20
 
-# Install runtime dependencies for Sharp
-RUN apk add --no-cache \
-    vips-dev
+# Install runtime dependencies for Sharp and Prisma
+RUN apt-get update && apt-get install -y \
+    libvips-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -43,6 +49,7 @@ COPY --from=builder /app/apps/worker-image ./apps/worker-image
 
 # Copy shared packages
 COPY --from=builder /app/packages/config ./packages/config
+COPY --from=builder /app/packages/database ./packages/database
 COPY --from=builder /app/packages/redis ./packages/redis
 
 # Copy root node_modules for workspace resolution

@@ -10,21 +10,23 @@
     "test": "echo 'No tests for worker-image package' && exit 0"
   },
   "dependencies": {
+    "@nestjs/bullmq": "^10.0.0",
     "@nestjs/common": "^10.0.0",
     "@nestjs/core": "^10.0.0",
-    "@nestjs/bullmq": "^10.0.0",
+    "@prisma/client": "^5.0.0",
     "@systemvibe/config": "^1.0.0",
+    "@systemvibe/database": "^0.1.0",
     "@systemvibe/redis": "^0.1.0",
+    "axios": "^1.16.1",
     "bullmq": "^5.0.0",
-    "sharp": "^0.33.0",
     "pino": "^8.16.0",
     "pino-pretty": "^10.3.0",
-    "@prisma/client": "^5.0.0"
+    "sharp": "^0.33.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
+    "prisma": "^5.0.0",
     "ts-node": "^10.9.0",
-    "typescript": "^5.0.0",
-    "prisma": "^5.0.0"
+    "typescript": "^5.0.0"
   }
 }
