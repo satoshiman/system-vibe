@@ -339,6 +339,110 @@ redis:
 
 </details>
 
+## Docker & Workers
+
+<details>
+<summary>What does the Dockerfile in packages/worker-image do?</summary>
+
+The Dockerfile in `packages/worker-image` is used to build and run the **image processing worker**. It performs the following steps:
+
+1. **Base image**: Uses `node:20-alpine` (lightweight, optimized for production)
+2. **Install Sharp dependencies**: Installs `vips-dev`, `build-base`, `pkgconfig` - these are required by Sharp for image processing
+3. **Copy source**: Copies `package.json`, `tsconfig.json`, and source code from `packages/worker-image/src`
+4. **Install & Build**: Installs dependencies and compiles TypeScript to JavaScript
+5. **Environment**: Sets `NODE_ENV=production` and `LOG_LEVEL=info`
+6. **Run**: Starts the worker with `node dist/main.js`
+
+This worker processes image jobs from the Redis queue (resize, optimize, convert format, etc.) using Sharp as the primary image processing library.
+
+</details>
+
+<details>
+<summary>How to scale the worker-image to multiple containers?</summary>
+
+There are three ways to scale the `worker-image` to multiple containers:
+
+**1. Docker Compose Scale (Simplest)**
+
+```bash
+docker-compose up -d --scale worker-image=3
+```
+
+This scales to 3 worker-image containers. Note: You must remove the `container_name` from docker-compose.yml because scaling doesn't allow multiple containers with the same name.
+
+**2. Docker Swarm (Production)**
+
+Add to docker-compose.yml:
+
+```yaml
+worker-image:
+  deploy:
+    replicas: 3
+    mode: replicated
+```
+
+Then deploy with Docker Swarm.
+
+**3. Kubernetes (Large Production)**
+
+Use a Deployment with `replicas: 3` and HorizontalPodAutoscaler.
+
+**Important Notes:**
+
+- Redis queue automatically distributes jobs to worker consumers
+- No load balancer needed for workers (no exposed ports)
+- Monitor Redis queue length to determine when to auto-scale
+
+</details>
+
+<details>
+<summary>What are the criteria for creating a worker? Why not use an API instead?</summary>
+
+**Criteria for Creating a Worker:**
+
+1. **Task characteristics:**
+   - **Async/Long-running**: Processing takes significant time (image resize, video encoding, PDF generation)
+   - **CPU-intensive**: Consumes substantial CPU/GPU resources
+   - **Non-blocking**: No immediate response required
+   - **Retry-able**: Can be retried on failure
+
+2. **Architecture pattern:**
+   - **Producer-Consumer**: API pushes jobs to queue, worker consumes and processes
+   - **Decoupling**: API doesn't depend on processing time
+   - **Scalability**: Scale workers independently from API
+
+3. **Suitable use cases:**
+   - Image/video processing
+   - Email sending
+   - Data import/export
+   - Report generation
+   - Background jobs
+
+**Why Worker Instead of API?**
+
+**API (Synchronous):**
+
+- Client waits for response → timeout if processing takes long
+- Blocks threads → reduces throughput
+- Difficult to retry on failure
+- Scales based on HTTP traffic
+
+**Worker (Asynchronous):**
+
+- Client receives job ID immediately → polling/webhook when complete
+- Non-blocking → API handles other requests
+- Queue automatically retries on failure
+- Scales based on queue length
+- Resource separation: API for HTTP, worker for CPU
+
+**Real-world example:**
+Resizing a 100MB image:
+
+- API: Client times out after 30s, worker still running
+- Worker: Client gets job ID, checks back after 2 minutes → image ready
+
+</details>
+
 ## Testing
 
 <details>
