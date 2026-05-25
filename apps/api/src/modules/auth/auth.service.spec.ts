@@ -3,13 +3,15 @@ import { JwtService } from '@nestjs/jwt';
 import { UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 
-// Mock Prisma before importing AuthService
+// Mock PrismaService before importing AuthService
 const mockPrisma = {
   user: {
     findUnique: jest.fn(),
     create: jest.fn(),
     update: jest.fn(),
   },
+  $connect: jest.fn(),
+  $disconnect: jest.fn(),
 };
 
 const mockRedis = {
@@ -17,10 +19,6 @@ const mockRedis = {
   get: jest.fn(),
   del: jest.fn(),
 };
-
-jest.mock('@prisma/client', () => ({
-  PrismaClient: jest.fn(() => mockPrisma),
-}));
 
 jest.mock('@systemvibe/redis', () => ({
   __esModule: true,
@@ -32,6 +30,7 @@ jest.mock('bcrypt');
 
 // Import after mocking
 import { AuthService } from './auth.service';
+import { PrismaService } from '@systemvibe/database';
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -56,6 +55,10 @@ describe('AuthService', () => {
             sign: mockJwtSign,
             verify: mockJwtVerify,
           },
+        },
+        {
+          provide: PrismaService,
+          useValue: mockPrisma,
         },
       ],
     }).compile();

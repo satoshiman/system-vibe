@@ -1,10 +1,11 @@
 import { registerAs } from '@nestjs/config';
+import { env } from '@systemvibe/config';
 
 export default registerAs('queue', () => ({
   redis: {
-    host: process.env.REDIS_HOST || 'localhost',
-    port: parseInt(process.env.REDIS_PORT || '6379', 10),
-    password: process.env.REDIS_PASSWORD || undefined,
+    host: env.REDIS_HOST,
+    port: env.REDIS_PORT,
+    password: env.REDIS_PASSWORD,
   },
   defaultJobOptions: {
     attempts: 3,

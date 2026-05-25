@@ -3,6 +3,7 @@ import { Client } from 'pg';
 import Redis from 'ioredis';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
+import { env } from '@systemvibe/config';
 
 @Injectable()
 export class HealthService implements OnModuleInit, OnModuleDestroy {
@@ -14,9 +15,9 @@ export class HealthService implements OnModuleInit, OnModuleDestroy {
 
   async onModuleInit() {
     this.dbClient = new Client({
-      connectionString: process.env.DATABASE_URL,
+      connectionString: env.DATABASE_URL,
     });
-    this.redisClient = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
+    this.redisClient = new Redis(env.REDIS_URL);
 
     try {
       await this.dbClient.connect();

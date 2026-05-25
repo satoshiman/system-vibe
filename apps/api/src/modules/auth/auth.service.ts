@@ -1,20 +1,21 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
-import { PrismaClient } from '@prisma/client';
+import { PrismaService } from '@systemvibe/database';
 import getRedisClient from '@systemvibe/redis';
 import { env } from '@systemvibe/config';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 
-const prisma = new PrismaClient();
-
 @Injectable()
 export class AuthService {
-  constructor(private jwtService: JwtService) {}
+  constructor(
+    private jwtService: JwtService,
+    private prisma: PrismaService
+  ) {}
 
   async register(dto: RegisterDto) {
-    const existingUser = await prisma.user.findUnique({
+    const existingUser = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
 
@@ -24,7 +25,7 @@ export class AuthService {
 
     const passwordHash = await bcrypt.hash(dto.password, 10);
 
-    const user = await prisma.user.create({
+    const user = await this.prisma.user.create({
       data: {
         email: dto.email,
         name: dto.name,
@@ -54,7 +55,7 @@ export class AuthService {
   }
 
   async login(dto: LoginDto) {
-    const user = await prisma.user.findUnique({
+    const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
 
@@ -95,7 +96,7 @@ export class AuthService {
         secret: env.JWT_REFRESH_SECRET,
       });
 
-      const user = await prisma.user.findUnique({
+      const user = await this.prisma.user.findUnique({
         where: { id: payload.sub },
       });
 
@@ -126,7 +127,7 @@ export class AuthService {
     await redis.del(`session:${userId}`);
 
     // Clear refresh token in database
-    await prisma.user.update({
+    await this.prisma.user.update({
       where: { id: userId },
       data: { refreshToken: null },
     });
@@ -148,7 +149,7 @@ export class AuthService {
     });
 
     // Store refresh token in database
-    await prisma.user.update({
+    await this.prisma.user.update({
       where: { id: userId },
       data: { refreshToken },
     });
@@ -160,7 +161,7 @@ export class AuthService {
   }
 
   async validateUser(userId: string) {
-    const user = await prisma.user.findUnique({
+    const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: {
         id: true,

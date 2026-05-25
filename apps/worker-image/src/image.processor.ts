@@ -2,10 +2,11 @@ import { Processor, WorkerHost, OnWorkerEvent } from "@nestjs/bullmq";
 import { Job } from "bullmq";
 import sharp from "sharp";
 import pino from "pino";
-import Redis from "ioredis";
+import getRedisClient from "@systemvibe/redis";
+import { env } from "@systemvibe/config";
 
 const logger = pino({
-  level: process.env.LOG_LEVEL || "info",
+  level: env.LOG_LEVEL,
   transport: {
     target: "pino-pretty",
     options: {
@@ -14,12 +15,9 @@ const logger = pino({
   },
 });
 
-const redis = new Redis({
-  host: process.env.REDIS_HOST || "localhost",
-  port: parseInt(process.env.REDIS_PORT || "6379", 10),
-  password: process.env.REDIS_PASSWORD || undefined,
-});
+const redis = getRedisClient();
 
+// HOSTNAME is a runtime variable set by Docker, not in .env
 const WORKER_ID = `worker-image-${process.env.HOSTNAME || "local"}`;
 const HEARTBEAT_KEY = `worker:heartbeat:${WORKER_ID}`;
 const HEARTBEAT_TTL = 30; // 30 seconds

@@ -9,7 +9,7 @@ export class RedisConfigService implements SharedBullConfigurationFactory {
       connection: {
         host: env.REDIS_HOST,
         port: env.REDIS_PORT,
-        password: process.env.REDIS_PASSWORD || undefined,
+        password: env.REDIS_PASSWORD,
       },
     };
   }
