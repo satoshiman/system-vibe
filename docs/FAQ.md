@@ -339,6 +339,90 @@ redis:
 
 </details>
 
+<details>
+<summary>How do BullMQ, Redis, and Workers work together?</summary>
+
+BullMQ is a Redis-based queue system that enables asynchronous job processing. Here's how the components interact:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         API Service                              │
+│                    (Producer - NestJS)                           │
+│                                                                  │
+│  POST /api/jobs                                                  │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │ 1. Create job in PostgreSQL (status: PENDING)            │   │
+│  │ 2. Add job to BullMQ queue via Redis                     │   │
+│  │    jobsQueue.add('image-resize', { data })               │   │
+│  │ 3. Update job status to QUEUED                           │   │
+│  │ 4. Return job ID to client                               │   │
+│  └──────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
+                            │
+                            │ Redis connection
+                            │ (BullMQ Queue)
+                            ↓
+┌─────────────────────────────────────────────────────────────────┐
+│                      Redis Server                                │
+│                 (Queue Backend & Storage)                        │
+│                                                                  │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │ BullMQ Data Structures:                                   │   │
+│  │ - Queue: 'image' (FIFO list of jobs)                     │   │
+│  │ - Job data: { id, type, payload, priority, attempts }    │   │
+│  │ - Worker registry: { workerId, lastHeartbeat }           │   │
+│  │ - Job state: waiting, active, completed, failed         │   │
+│  └──────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
+                            │
+                            │ Worker connection
+                            │ (BullMQ Worker)
+                            ↓
+┌─────────────────────────────────────────────────────────────────┐
+│                  Worker Containers                              │
+│               (Consumer - worker-image)                         │
+│                                                                  │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │ Worker Process 1                                          │   │
+│  │ - Connects to Redis queue                                │   │
+│  │ - Registers as worker (heartbeat every 5s)               │   │
+│  │ - Polls for jobs (BRPOPLPUSH)                            │   │
+│  │ - Processes job (image resize)                           │   │
+│  │ - Updates job status in Redis                            │   │
+│  │ - Updates job status in PostgreSQL                       │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                                                                  │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │ Worker Process 2 (if scaled)                             │   │
+│  │ - Same as Worker 1                                      │   │
+│  │ - BullMQ distributes jobs round-robin                     │   │
+│  └──────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Key Concepts:**
+
+- **Redis**: Acts as the backend storage and message broker for BullMQ queues. Stores job data, queue state, and worker metadata.
+- **BullMQ**: Library that provides queue semantics on top of Redis. Handles job scheduling, retry logic, priority, and worker coordination.
+- **Workers**: Consumer processes that connect to Redis, poll for jobs, process them, and update status. Can be scaled horizontally.
+
+**Data Flow:**
+
+1. API creates job in PostgreSQL → adds to BullMQ queue in Redis
+2. Redis stores job in queue data structure
+3. Workers poll Redis for available jobs
+4. Worker picks up job → processes → updates status in both Redis and PostgreSQL
+5. Client polls API for job status or receives webhook
+
+**Why this architecture:**
+
+- **Decoupling**: API doesn't wait for processing to complete
+- **Scalability**: Workers can be scaled independently based on queue length
+- **Reliability**: Redis persistence + PostgreSQL as source of truth
+- **Retry logic**: BullMQ automatically retries failed jobs
+
+</details>
+
 ## Docker & Workers
 
 <details>
