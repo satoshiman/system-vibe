@@ -2,6 +2,8 @@
 
 **Duration**: 1 week | **Goal**: Implement authentication system with JWT and Redis sessions
 
+**Note**: This guide has been updated to reflect the current implementation. Phase 2 is complete.
+
 After Phase 2, you'll have:
 
 - ✅ User registration and login

@@ -206,7 +206,7 @@ import { ConfigModule, ConfigService } from "@nestjs/config";
     }),
     // Register specific queues
     BullModule.registerQueue({
-      name: "jobs",
+      name: "jobs,
     }),
   ],
   exports: [BullModule],
@@ -226,12 +226,7 @@ import { JobsService } from "./jobs.service";
 import { QueueModule } from "../queue/queue.module";
 
 @Module({
-  imports: [
-    QueueModule,
-    BullModule.registerQueue({
-      name: "jobs",
-    }),
-  ],
+  imports: [QueueModule],
   controllers: [JobsController],
   providers: [JobsService],
 })
@@ -389,11 +384,11 @@ import { Queue } from "bullmq";
 
 @Injectable()
 export class JobsService {
-  constructor(@InjectQueue("jobs") private jobsQueue: Queue) {}
+  constructor(@InjectQueue("image") private imageQueue: Queue) {}
 
   async createJob(createJobDto: CreateJobDto) {
     // Add job to queue
-    await this.jobsQueue.add(
+    await this.imageQueue.add(
       createJobDto.type,
       {
         jobId: job.id,
@@ -414,7 +409,7 @@ export class JobsService {
 
   private getPriorityValue(priority: string): number {
     const priorityMap: Record<string, number> = {
-      low: 20,
+      low: 5,
       normal: 10,
       high: 1,
     };
@@ -429,7 +424,7 @@ export class JobsService {
 | -------- | ------------ | ---------------- |
 | `high`   | 1            | Processed first  |
 | `normal` | 10           | Default priority |
-| `low`    | 20           | Processed last   |
+| `low`    | 5            | Processed last   |
 
 ### Retry Logic
 
@@ -490,13 +485,13 @@ const jobCounts = await jobsQueue.getJobCounts();
 
 ```bash
 # Check queue length
-XLEN bull:jobs
+XLEN bull:image
 
 # View queue jobs
-XRANGE bull:jobs - +
+XRANGE bull:image - +
 
 # Check consumer groups
-XINFO GROUPS bull:jobs
+XINFO GROUPS bull:image
 ```
 
 ---
@@ -644,10 +639,10 @@ import { getQueueToken } from "@nestjs/bullmq";
 const serverAdapter = new ExpressAdapter();
 serverAdapter.setBasePath("/admin/queues");
 
-const jobsQueue = app.get(getQueueToken("jobs"));
+const imageQueue = app.get(getQueueToken("image"));
 
 createBullBoard({
-  queues: [new BullMQAdapter(jobsQueue, { readOnlyMode: false })],
+  queues: [new BullMQAdapter(imageQueue, { readOnlyMode: false })],
   serverAdapter,
 });
 
@@ -674,7 +669,7 @@ Add debugging endpoints to your API:
 // jobs.controller.ts
 @Get('debug/queue-stats')
 async getQueueStats() {
-  const counts = await this.jobsQueue.getJobCounts();
+  const counts = await this.jobsueue.getJobCounts();
   return {
     waiting: counts.waiting,
     active: counts.active,
@@ -686,7 +681,7 @@ async getQueueStats() {
 
 @Get('debug/failed-jobs')
 async getFailedJobs() {
-  const jobs = await this.jobsQueue.getFailed(0, 10);
+  const jobs = await this.jobsueue.getFailed(0, 10);
   return jobs.map(job => ({
     id: job.id,
     name: job.name,
@@ -699,7 +694,7 @@ async getFailedJobs() {
 
 @Get('debug/active-jobs')
 async getActiveJobs() {
-  const jobs = await this.jobsQueue.getActive(0, 10);
+  const jobs = await this.jobsueue.getActive(0, 10);
   return jobs.map(job => ({
     id: job.id,
     name: job.name,
@@ -733,23 +728,23 @@ Add job event listeners:
 ```typescript
 // jobs.service.ts
 async onModuleInit() {
-  this.jobsQueue.on('waiting', (job) => {
+  this.imageQueue.on('waiting', (job) => {
     console.log(`Job ${job.id} is waiting`);
   });
 
-  this.jobsQueue.on('active', (job) => {
+  this.imageQueue.on('active', (job) => {
     console.log(`Job ${job.id} is now active`);
   });
 
-  this.jobsQueue.on('completed', (job) => {
+  this.imageQueue.on('completed', (job) => {
     console.log(`Job ${job.id} completed`);
   });
 
-  this.jobsQueue.on('failed', (job, err) => {
+  this.imageQueue.on('failed', (job, err) => {
     console.error(`Job ${job.id} failed:`, err.message);
   });
 
-  this.jobsQueue.on('stalled', (job) => {
+  this.imageQueue.on('stalled', (job) => {
     console.warn(`Job ${job.id} stalled`);
   });
 }
@@ -764,17 +759,17 @@ async onModuleInit() {
 ps aux | grep node
 
 # Check queue length
-redis-cli XLEN bull:jobs
+redis-cli XLEN bull:image
 
 # Force move stuck jobs
-redis-cli LTRIM bull:jobs:waiting 0 -1
+redis-cli LTRIM bull:image:waiting 0 -1
 ```
 
 #### Jobs Not Retrying
 
 ```typescript
 // Check job configuration
-const job = await this.jobsQueue.getJob(jobId);
+const job = await this.imageQueue.getJob(jobId);
 console.log("Job config:", {
   attempts: job.opts.attempts,
   backoff: job.opts.backoff,
@@ -795,8 +790,8 @@ redis-cli INFO keyspace
 redis-cli --bigkeys
 
 # Clean up completed jobs
-await this.jobsQueue.clean(0, 100, 'completed');
-await this.jobsQueue.clean(0, 50, 'failed');
+await this.imageQueue.clean(0, 100, 'completed');
+await this.imageQueue.clean(0, 50, 'failed');
 ```
 
 ### Monitoring Tools

@@ -2,6 +2,8 @@
 
 **Duration**: 1-2 weeks | **Goal**: Implement background job workers for processing queued jobs
 
+**Note**: This guide has been updated to reflect the current implementation. Phase 4 is complete.
+
 After Phase 4, you'll have:
 
 - ✅ Worker package structure with NestJS
@@ -51,12 +53,11 @@ cat > apps/worker-image/package.json << 'EOF'
     "@nestjs/core": "^10.0.0",
     "@nestjs/bullmq": "^10.0.0",
     "@systemvibe/config": "^1.0.0",
+    "@systemvibe/redis": "^1.0.0",
     "bullmq": "^5.0.0",
-    "ioredis": "^5.3.0",
     "sharp": "^0.33.0",
     "pino": "^8.16.0",
-    "pino-pretty": "^10.3.0",
-    "@prisma/client": "^5.0.0"
+    "pino-pretty": "^10.3.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
@@ -139,10 +140,11 @@ import { Processor, WorkerHost, OnWorkerEvent } from "@nestjs/bullmq";
 import { Job } from "bullmq";
 import sharp from "sharp";
 import pino from "pino";
-import Redis from "ioredis";
+import getRedisClient from "@systemvibe/redis";
+import { env } from "@systemvibe/config";
 
 const logger = pino({
-  level: process.env.LOG_LEVEL || "info",
+  level: env.LOG_LEVEL,
   transport: {
     target: "pino-pretty",
     options: {
@@ -151,12 +153,9 @@ const logger = pino({
   },
 });
 
-const redis = new Redis({
-  host: process.env.REDIS_HOST || "localhost",
-  port: parseInt(process.env.REDIS_PORT || "6379", 10),
-  password: process.env.REDIS_PASSWORD || undefined,
-});
+const redis = getRedisClient();
 
+// HOSTNAME is a runtime variable set by Docker, not in .env
 const WORKER_ID = `worker-image-${process.env.HOSTNAME || "local"}`;
 const HEARTBEAT_KEY = `worker:heartbeat:${WORKER_ID}`;
 const HEARTBEAT_TTL = 30; // 30 seconds

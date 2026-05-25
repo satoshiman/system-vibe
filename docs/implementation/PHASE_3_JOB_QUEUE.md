@@ -2,6 +2,8 @@
 
 **Duration**: 1-2 weeks | **Goal**: Implement core job submission and queue system with BullMQ
 
+**Note**: This guide has been updated to reflect the current implementation. Phase 3 is complete.
+
 After Phase 3, you'll have:
 
 - ✅ Job entity in PostgreSQL with Prisma
@@ -393,6 +395,16 @@ export class FilterJobsDto {
   type?: string;
 
   @ApiProperty({
+    description: 'Filter by job priority',
+    example: 'normal',
+    enum: ['low', 'normal', 'high'],
+    required: false,
+  })
+  @IsOptional()
+  @IsIn(['low', 'normal', 'high'])
+  priority?: string;
+
+  @ApiProperty({
     description: 'Page number',
     example: 1,
     required: false,
@@ -428,7 +440,7 @@ import { FilterJobsDto } from './dto/filter-jobs.dto';
 export class JobsService {
   constructor(
     private prisma: PrismaService,
-    @InjectQueue('jobs') private jobsQueue: Queue
+    @InjectQueue('image') private imageQueue: Queue
   ) {}
 
   async create(createJobDto: CreateJobDto): Promise<JobResponseDto> {
@@ -488,8 +500,9 @@ export class JobsService {
   async findAll(
     filterDto: FilterJobsDto
   ): Promise<{ jobs: JobResponseDto[]; total: number }> {
-    const { status, type, page = 1, limit = 20 } = filterDto;
-    const skip = (page - 1) * limit;
+    const { status, type, priority, page = 1, limit = 20 } = filterDto;
+    const skip = (Number(page) - 1) * Number(limit);
+    const limitNumber = Number(limit);
 
     const where: Record<string, unknown> = {};
 
@@ -500,6 +513,20 @@ export class JobsService {
     if (type) {
       where.type = type;
     }
+
+    if (priority) {
+      where.priority = priority;
+    }
+
+    const [jobs, total] = await Promise.all([
+      this.prisma.job.findMany({
+        where,
+        skip,
+        take: limitNumber,
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.job.count({ where }),
+    ]);
 
     const [jobs, total] = await Promise.all([
       this.prisma.job.findMany({
@@ -532,7 +559,7 @@ export class JobsService {
 
     // Remove from queue
     try {
-      await this.jobsQueue.remove(job.id);
+      await this.imageQueue.remove(job.id);
     } catch (error) {
       // Job might not be in queue anymore, continue with database update
     }
@@ -548,7 +575,7 @@ export class JobsService {
 
   private getPriorityValue(priority: string): number {
     const priorityMap: Record<string, number> = {
-      low: 20,
+      low: 5,
       normal: 10,
       high: 1,
     };
@@ -633,20 +660,13 @@ EOF
 # Create JobsModule
 cat > apps/api/src/modules/jobs/jobs.module.ts << 'EOF'
 import { Module } from '@nestjs/common';
-import { BullModule } from '@nestjs/bullmq';
 import { JobsController } from './jobs.controller';
 import { JobsService } from './jobs.service';
 import { QueueModule } from '../queue/queue.module';
 import { PrismaModule } from '@systemvibe/database';
 
 @Module({
-  imports: [
-    QueueModule,
-    PrismaModule,
-    BullModule.registerQueue({
-      name: 'jobs',
-    }),
-  ],
+  imports: [QueueModule, PrismaModule],
   controllers: [JobsController],
   providers: [JobsService],
   exports: [JobsService],
@@ -1534,6 +1554,12 @@ jest.mock('@nestjs/bullmq', () => ({
   InjectQueue: () => (target: any, key: string) => {},
   getQueueToken: (name: string) => `BullQueue_${name}`,
 }));
+
+// Mock the queue token for 'image' queue
+jest.mock('@nestjs/bullmq', () => ({
+  InjectQueue: () => (target: any, key: string) => {},
+  getQueueToken: (name: string) => `BullQueue_${name}`,
+}));
 ```
 
 ---
@@ -1721,13 +1747,13 @@ curl -X GET "http://localhost:3000/api/jobs?page=1&limit=10"
 docker exec -it systemvibe-redis redis-cli
 
 # Check BullMQ queue keys
-KEYS "bull:jobs:*"
+KEYS "bull:image:*"
 
 # Check queue length
-LLEN bull:jobs:waiting
+LLEN bull:image:waiting
 
 # Check job data
-HGETALL bull:jobs:<job_id>
+HGETALL bull:image:<job_id>
 ```
 
 ---
@@ -1801,11 +1827,11 @@ HGETALL bull:jobs:<job_id>
 ┌─────────────────────────────────────────────────────────┐
 │                    Redis Queue                           │
 │                                                          │
-│  bull:jobs:waiting  → Jobs waiting to be processed      │
-│  bull:jobs:active   → Jobs currently being processed    │
-│  bull:jobs:delayed  → Jobs waiting for retry            │
-│  bull:jobs:failed   → Jobs that failed                  │
-│  bull:jobs:completed → Jobs that succeeded              │
+│  bull:image:waiting  → Jobs waiting to be processed      │
+│  bull:image:active   → Jobs currently being processed    │
+│  bull:image:delayed  → Jobs waiting for retry            │
+│  bull:image:failed   → Jobs that failed                  │
+│  bull:image:completed → Jobs that succeeded              │
 └──────────────────┬──────────────────────────────────────┘
                    │
                    ↓
@@ -1827,7 +1853,7 @@ HGETALL bull:jobs:<job_id>
 // Priority mapping (lower number = higher priority)
 high: 1    → Processed first
 normal: 10 → Processed second
-low: 20    → Processed last
+low: 5     → Processed last
 
 // Example queue order:
 [high-priority-job-1, high-priority-job-2, normal-job-1, low-job-1, normal-job-2]

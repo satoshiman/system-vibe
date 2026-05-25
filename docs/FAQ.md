@@ -249,13 +249,13 @@ In SystemVibe, job priority determines the order in which jobs are processed by 
 
 - `high`: Processed first (BullMQ value: 1)
 - `normal`: Default priority (BullMQ value: 10)
-- `low`: Processed last (BullMQ value: 20)
+- `low`: Processed last (BullMQ value: 5)
 
 **How BullMQ Priority Works**
 
 - BullMQ uses **lower numbers = higher priority**
 - Jobs with priority 1 are processed before jobs with priority 10
-- Jobs with priority 10 are processed before jobs with priority 20
+- Jobs with priority 10 are processed before jobs with priority 5
 - Jobs with the same priority are processed in FIFO order
 
 **Implementation in SystemVibe**
