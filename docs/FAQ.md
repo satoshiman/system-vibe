@@ -342,6 +342,111 @@ redis:
 ## Docker & Workers
 
 <details>
+<summary>Why does API service run locally (npm run dev) instead of Docker container?</summary>
+
+In SystemVibe's development environment, the API service runs locally with `npm run dev` instead of in a Docker container. This is a deliberate development choice for the following reasons:
+
+**Benefits of Local Development (npm run dev):**
+
+1. **Hot Reload & Faster Development**
+   - `npm run dev` with `--watch` flag automatically reloads when code changes
+   - No need to rebuild Docker image after every code change
+   - Faster feedback loop during development
+
+2. **Easier Debugging**
+   - Can attach debugger directly to Node.js process
+   - View console output in real-time
+   - Use IDE debugging tools (VS Code breakpoints, etc.)
+
+3. **Resource Efficiency**
+   - No Docker container overhead
+   - Avoids volume mounting performance issues on macOS/Windows
+   - Reduced disk I/O
+
+4. **Development Flexibility**
+   - Easy to change environment variables
+   - Run tests locally with npm scripts
+   - Integration with dev tools (ESLint, Prettier, etc.)
+
+**What is host.docker.internal?**
+
+`host.docker.internal` is a special DNS name provided by Docker Desktop:
+
+- **MacOS/Windows Docker Desktop**: Automatically added to Docker network
+- **Linux**: Requires manual configuration or `--network host` flag
+- **Purpose**: Allows containers running in Docker to access services on the host machine
+
+**How it works in SystemVibe:**
+
+```
+┌─────────────────────────────────────────┐
+│   Host Machine (MacOS/Windows)          │
+│                                         │
+│   API Service (npm run dev)             │
+│   Listening on localhost:3000          │
+│                                         │
+└─────────────────────────────────────────┘
+                    ↑
+                    │ host.docker.internal:3000
+                    │
+┌─────────────────────────────────────────┐
+│   Docker Container (Nginx)              │
+│                                         │
+│   Nginx proxy_pass                      │
+│   to host.docker.internal:3000         │
+│                                         │
+└─────────────────────────────────────────┘
+```
+
+**Nginx Configuration:**
+
+Development environment:
+
+```nginx
+upstream api {
+  server host.docker.internal:3000;  # Points to local API
+}
+```
+
+Production environment:
+
+```nginx
+upstream api {
+  server api:3000;  # Points to Docker container
+}
+```
+
+**Trade-offs:**
+
+**Advantages:**
+
+- Better development experience
+- Easier debugging
+- Faster iteration
+
+**Disadvantages:**
+
+- Not identical to production environment (API in Docker)
+- Must ensure dependencies (Node version, packages) are consistent
+- Potential port conflicts when running multiple services
+
+**Production Setup:**
+
+In production, both API and Nginx run in Docker containers:
+
+- API runs in container with name `api`
+- Nginx proxies to `api:3000` (container name in Docker network)
+- Ensures consistent, reproducible environment
+- Enables easy scaling (multiple API instances)
+- Proper isolation between services
+
+**Important Note:**
+
+This development setup is specific to the SystemVibe project. Other projects may choose to run API in Docker even during development for environment consistency.
+
+</details>
+
+<details>
 <summary>What does the Dockerfile in apps/worker-image do?</summary>
 
 The Dockerfile in `apps/worker-image` is used to build and run the **image processing worker**. It performs the following steps:
