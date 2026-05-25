@@ -10,7 +10,7 @@ import { FilterJobsDto } from './dto/filter-jobs.dto';
 export class JobsService {
   constructor(
     private prisma: PrismaService,
-    @InjectQueue('jobs') private jobsQueue: Queue
+    @InjectQueue('image') private imageQueue: Queue
   ) {}
 
   async create(createJobDto: CreateJobDto): Promise<JobResponseDto> {
@@ -28,7 +28,7 @@ export class JobsService {
     });
 
     // Add job to BullMQ queue
-    await this.jobsQueue.add(
+    await this.imageQueue.add(
       createJobDto.type,
       {
         jobId: job.id,
@@ -122,7 +122,7 @@ export class JobsService {
 
     // Remove from queue
     try {
-      await this.jobsQueue.remove(job.id);
+      await this.imageQueue.remove(job.id);
     } catch (error) {
       // Job might not be in queue anymore, continue with database update
     }

@@ -54,12 +54,12 @@ SystemVibe uses **BullMQ** (built on Redis Streams) for reliable job queue manag
 │  └──────────────────────────┘  │
 └─────────────────────────────────┘
               │
-              ↓ (future)
+              ↓
 ┌─────────────────────────────────┐
 │         Workers                 │
-│  - Image Worker                 │
-│  - Video Worker                 │
-│  - AI Worker                   │
+│  - Image Worker ✅ (Phase 4)    │
+│  - Video Worker (future)        │
+│  - AI Worker (future)           │
 └─────────────────────────────────┘
 ```
 
@@ -152,11 +152,13 @@ QUEUE_REDIS_PASSWORD=
 **File:** `apps/api/src/config/queue.config.ts`
 
 ```typescript
+import { env } from "@systemvibe/config";
+
 export const queueConfig = {
   redis: {
-    host: process.env.QUEUE_REDIS_HOST || "localhost",
-    port: parseInt(process.env.QUEUE_REDIS_PORT || "6379", 10),
-    password: process.env.QUEUE_REDIS_PASSWORD || undefined,
+    host: env.REDIS_HOST,
+    port: env.REDIS_PORT,
+    password: process.env.REDIS_PASSWORD || undefined,
   },
   defaultJobOptions: {
     attempts: 3,

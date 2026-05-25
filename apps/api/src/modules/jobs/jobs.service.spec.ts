@@ -42,7 +42,7 @@ describe('JobsService', () => {
           useValue: mockPrisma,
         },
         {
-          provide: getQueueToken('jobs'),
+          provide: getQueueToken('image'),
           useValue: mockQueue,
         },
       ],

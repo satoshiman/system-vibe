@@ -1,11 +1,11 @@
-import Redis from 'ioredis';
+import Redis from "ioredis";
+import { env } from "@systemvibe/config";
 
 let redisClient: Redis | null = null;
 
 export function getRedisClient(): Redis {
   if (!redisClient) {
-    const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
-    redisClient = new Redis(redisUrl, {
+    redisClient = new Redis(env.REDIS_URL, {
       maxRetriesPerRequest: null,
       enableReadyCheck: false,
       enableOfflineQueue: true,
@@ -13,12 +13,12 @@ export function getRedisClient(): Redis {
       retryStrategy: (times) => Math.min(times * 50, 2000),
     });
 
-    redisClient.on('error', (err) => {
-      console.error('Redis connection error:', err);
+    redisClient.on("error", (err) => {
+      console.error("Redis connection error:", err);
     });
 
-    redisClient.on('connect', () => {
-      console.log('Redis connected successfully');
+    redisClient.on("connect", () => {
+      console.log("Redis connected successfully");
     });
   }
 

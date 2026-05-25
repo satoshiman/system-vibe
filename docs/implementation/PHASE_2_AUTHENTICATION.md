@@ -3,6 +3,7 @@
 **Duration**: 1 week | **Goal**: Implement authentication system with JWT and Redis sessions
 
 After Phase 2, you'll have:
+
 - ✅ User registration and login
 - ✅ JWT token generation (access + refresh tokens)
 - ✅ Auth guards on protected endpoints
@@ -15,6 +16,7 @@ After Phase 2, you'll have:
 ## Prerequisites
 
 **Before starting Phase 2, ensure Phase 1 is complete:**
+
 - Docker Compose services running (PostgreSQL, Redis)
 - NestJS API server operational
 - Health check endpoint working
@@ -36,6 +38,7 @@ npm install --workspace=apps/api class-validator class-transformer
 ```
 
 **Dependencies explained:**
+
 - `bcrypt`: Password hashing (10 rounds for security)
 - `@nestjs/jwt`: JWT token generation and validation
 - `@nestjs/passport`: Authentication framework integration
@@ -98,13 +101,13 @@ EOF
 # Create Redis client
 cat > packages/redis/src/index.ts << 'EOF'
 import Redis from 'ioredis';
+import { env } from '@systemvibe/config';
 
 let redisClient: Redis | null = null;
 
 export function getRedisClient(): Redis {
   if (!redisClient) {
-    const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
-    redisClient = new Redis(redisUrl, {
+    redisClient = new Redis(env.REDIS_URL, {
       maxRetriesPerRequest: null,
       enableReadyCheck: false,
       enableOfflineQueue: true,
@@ -177,6 +180,7 @@ cd ../..
 ```
 
 **Schema changes:**
+
 - `passwordHash`: Stores bcrypt-hashed passwords (never plain text)
 - `refreshToken`: Stores current refresh token for validation
 
@@ -228,6 +232,7 @@ cat > apps/api/src/modules/auth/strategies/jwt.strategy.ts << 'EOF'
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
+import { env } from '@systemvibe/config';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -235,7 +240,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: process.env.JWT_SECRET || 'secret',
+      secretOrKey: env.JWT_SECRET,
     });
   }
 
@@ -356,7 +361,7 @@ export class AuthService {
   async refreshTokens(refreshToken: string) {
     try {
       const payload = this.jwtService.verify(refreshToken, {
-        secret: process.env.JWT_REFRESH_SECRET || 'refresh-secret',
+        secret: env.JWT_REFRESH_SECRET,
       });
 
       const user = await prisma.user.findUnique({
@@ -402,13 +407,13 @@ export class AuthService {
     const payload = { sub: userId, email };
 
     const accessToken = this.jwtService.sign(payload, {
-      secret: process.env.JWT_SECRET || 'secret',
-      expiresIn: '15m',
+      secret: env.JWT_SECRET,
+      expiresIn: env.JWT_EXPIRES_IN as any,
     });
 
     const refreshToken = this.jwtService.sign(payload, {
-      secret: process.env.JWT_REFRESH_SECRET || 'refresh-secret',
-      expiresIn: '7d',
+      secret: env.JWT_REFRESH_SECRET,
+      expiresIn: env.JWT_REFRESH_EXPIRES_IN as any,
     });
 
     // Store refresh token in database
@@ -502,13 +507,14 @@ import { PassportModule } from '@nestjs/passport';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
+import { env } from '@systemvibe/config';
 
 @Module({
   imports: [
     PassportModule,
     JwtModule.register({
-      secret: process.env.JWT_SECRET || 'secret',
-      signOptions: { expiresIn: '15m' },
+      secret: env.JWT_SECRET,
+      signOptions: { expiresIn: env.JWT_EXPIRES_IN },
     }),
   ],
   controllers: [AuthController],
@@ -547,6 +553,7 @@ cat > apps/api/src/modules/health/health.service.ts << 'EOF'
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { Client } from 'pg';
 import Redis from 'ioredis';
+import { env } from '@systemvibe/config';
 
 @Injectable()
 export class HealthService implements OnModuleInit, OnModuleDestroy {
@@ -556,9 +563,9 @@ export class HealthService implements OnModuleInit, OnModuleDestroy {
 
   async onModuleInit() {
     this.dbClient = new Client({
-      connectionString: process.env.DATABASE_URL,
+      connectionString: env.DATABASE_URL,
     });
-    this.redisClient = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
+    this.redisClient = new Redis(env.REDIS_URL);
 
     try {
       await this.dbClient.connect();
@@ -679,6 +686,7 @@ curl -X POST http://localhost:3000/api/auth/register \
 ```
 
 **Expected Response:**
+
 ```json
 {
   "user": {
@@ -797,22 +805,26 @@ TTL session:<user_id>
 ## Security Considerations
 
 **Password Security:**
+
 - Always hash passwords with bcrypt (10+ rounds)
 - Never store plain text passwords
 - Use strong password requirements (min 6 characters)
 
 **Token Security:**
+
 - Access tokens expire in 15 minutes
 - Refresh tokens expire in 7 days
 - Use strong secrets in production
 - Store secrets in environment variables
 
 **Session Security:**
+
 - Sessions stored in Redis with 24-hour TTL
 - Session validation on every protected request
 - Immediate session invalidation on logout
 
 **Production Recommendations:**
+
 - Use HTTPS only
 - Rotate JWT secrets regularly
 - Implement rate limiting on auth endpoints
@@ -860,6 +872,7 @@ docker exec systemvibe-redis redis-cli TTL session:<user_id>
 ## Next Steps (Phase 3)
 
 You're ready for **Phase 3: Job Queue with BullMQ**:
+
 - Background job processing
 - Worker implementation
 - Job retry logic

@@ -176,11 +176,12 @@ npm run build --workspace=packages/database
 # Create queue config
 cat > apps/api/src/config/queue.config.ts << 'EOF'
 import { registerAs } from '@nestjs/config';
+import { env } from '@systemvibe/config';
 
 export default registerAs('queue', () => ({
   redis: {
-    host: process.env.REDIS_HOST || 'localhost',
-    port: parseInt(process.env.REDIS_PORT || '6379', 10),
+    host: env.REDIS_HOST,
+    port: env.REDIS_PORT,
     password: process.env.REDIS_PASSWORD || undefined,
   },
   defaultJobOptions: {
@@ -694,14 +695,11 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import pino from 'pino';
-import * as dotenv from 'dotenv';
+import { env } from '@systemvibe/config';
 import { createBullBoard } from '@bull-board/api';
 import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
 import { ExpressAdapter } from '@bull-board/express';
 import { getQueueToken } from '@nestjs/bullmq';
-
-// Load .env from root directory (assumes running from project root)
-dotenv.config();
 
 const logger = pino();
 
@@ -747,7 +745,7 @@ async function bootstrap() {
 
   app.use('/admin/queues', serverAdapter.getRouter());
 
-  const port = process.env.API_PORT || 3000;
+  const port = env.API_PORT;
   await app.listen(port, '0.0.0.0');
 
   logger.info(\`API Server running on http://localhost:\${port}\`);

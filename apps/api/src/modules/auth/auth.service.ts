@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { PrismaClient } from '@prisma/client';
 import getRedisClient from '@systemvibe/redis';
+import { env } from '@systemvibe/config';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 
@@ -39,7 +40,7 @@ export class AuthService {
       `session:${user.id}`,
       JSON.stringify({ userId: user.id, email: user.email }),
       'EX',
-      86400,
+      86400
     );
 
     return {
@@ -75,7 +76,7 @@ export class AuthService {
       `session:${user.id}`,
       JSON.stringify({ userId: user.id, email: user.email }),
       'EX',
-      86400,
+      86400
     );
 
     return {
@@ -91,7 +92,7 @@ export class AuthService {
   async refreshTokens(refreshToken: string) {
     try {
       const payload = this.jwtService.verify(refreshToken, {
-        secret: process.env.JWT_REFRESH_SECRET || 'refresh-secret',
+        secret: env.JWT_REFRESH_SECRET,
       });
 
       const user = await prisma.user.findUnique({
@@ -110,7 +111,7 @@ export class AuthService {
         `session:${user.id}`,
         JSON.stringify({ userId: user.id, email: user.email }),
         'EX',
-        86400,
+        86400
       );
 
       return tokens;
@@ -137,13 +138,13 @@ export class AuthService {
     const payload = { sub: userId, email };
 
     const accessToken = this.jwtService.sign(payload, {
-      secret: process.env.JWT_SECRET || 'secret',
-      expiresIn: '15m',
+      secret: env.JWT_SECRET,
+      expiresIn: env.JWT_EXPIRES_IN as any,
     });
 
     const refreshToken = this.jwtService.sign(payload, {
-      secret: process.env.JWT_REFRESH_SECRET || 'refresh-secret',
-      expiresIn: '7d',
+      secret: env.JWT_REFRESH_SECRET,
+      expiresIn: env.JWT_REFRESH_EXPIRES_IN as any,
     });
 
     // Store refresh token in database

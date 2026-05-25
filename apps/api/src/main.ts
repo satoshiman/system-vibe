@@ -2,14 +2,11 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import pino from 'pino';
-import * as dotenv from 'dotenv';
 import { createBullBoard } from '@bull-board/api';
 import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
 import { ExpressAdapter } from '@bull-board/express';
 import { getQueueToken } from '@nestjs/bullmq';
-
-// Load .env from root directory (assumes running from project root)
-dotenv.config();
+import { env } from '@systemvibe/config';
 
 const logger = pino();
 
@@ -46,16 +43,16 @@ async function bootstrap() {
   const serverAdapter = new ExpressAdapter();
   serverAdapter.setBasePath('/admin/queues');
 
-  const jobsQueue = app.get(getQueueToken('jobs'));
+  const imageQueue = app.get(getQueueToken('image'));
 
   createBullBoard({
-    queues: [new BullMQAdapter(jobsQueue, { readOnlyMode: false })],
+    queues: [new BullMQAdapter(imageQueue, { readOnlyMode: false })],
     serverAdapter,
   });
 
   app.use('/admin/queues', serverAdapter.getRouter());
 
-  const port = process.env.API_PORT || 3000;
+  const port = env.API_PORT;
   await app.listen(port, '0.0.0.0');
 
   logger.info(`API Server running on http://localhost:${port}`);

@@ -16,7 +16,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
       }),
     }),
     BullModule.registerQueue({
-      name: 'jobs',
+      name: 'image',
     }),
   ],
   exports: [BullModule],

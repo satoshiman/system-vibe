@@ -24,12 +24,14 @@
 **Definition**: A monorepo (monolithic repository) is a version control strategy where multiple projects/packages are stored in a single repository.
 
 **Key Characteristics:**
+
 - Multiple packages/apps in one Git repository
 - Shared dependencies and tooling
 - Unified version control
 - Atomic commits across packages
 
 **Real-world examples:**
+
 - Google (all code in one monorepo)
 - Facebook/Meta
 - Microsoft
@@ -51,6 +53,7 @@ my-project/
 ```
 
 **Characteristics:**
+
 - One `package.json`
 - One set of dependencies
 - One build process
@@ -80,6 +83,7 @@ my-monorepo/
 ```
 
 **Characteristics:**
+
 - Multiple `package.json` files
 - Dependencies can be shared
 - Each package can be built independently
@@ -94,6 +98,7 @@ my-monorepo/
 npm Workspaces is a built-in feature (npm 7+) that manages monorepo dependencies automatically.
 
 **How it works:**
+
 1. Root `package.json` defines workspaces
 2. npm automatically links local packages
 3. Dependencies are "hoisted" to root `node_modules`
@@ -106,14 +111,12 @@ npm Workspaces is a built-in feature (npm 7+) that manages monorepo dependencies
 {
   "name": "my-monorepo",
   "private": true,
-  "workspaces": [
-    "apps/*",
-    "packages/*"
-  ]
+  "workspaces": ["apps/*", "packages/*"]
 }
 ```
 
 **What this tells npm:**
+
 - Look in `apps/` directory for workspaces
 - Look in `packages/` directory for workspaces
 - `*` is a wildcard matching any folder name
@@ -140,6 +143,10 @@ systemvibe/
 │   ├── redis/                # Redis utilities
 │   │   ├── package.json
 │   │   └── src/
+│   ├── worker-image/         # Image processing worker
+│   │   ├── package.json
+│   │   ├── src/
+│   │   └── Dockerfile
 │   └── shared/               # Shared types/utils
 │       ├── package.json
 │       └── src/
@@ -153,17 +160,20 @@ systemvibe/
 ### Why This Structure?
 
 **apps/** - Deployable applications
+
 - `apps/api/` - Main API server
 - Future: `apps/worker/`, `apps/webhook/`, etc.
 - Each app can be deployed independently
 
 **packages/** - Shared libraries
+
 - `packages/database/` - Database client used by all apps
 - `packages/redis/` - Redis utilities used by all apps
 - `packages/shared/` - Common types and utilities
 - Code reuse across apps
 
 **infra/** - Infrastructure
+
 - Docker configurations
 - Deployment scripts
 - Not part of the build process
@@ -180,13 +190,14 @@ systemvibe/
 // apps/api/package.json
 {
   "dependencies": {
-    "@nestjs/common": "^10.0.0",  // External package
-    "bcrypt": "^6.0.0"            // External package
+    "@nestjs/common": "^10.0.0", // External package
+    "bcrypt": "^6.0.0" // External package
   }
 }
 ```
 
 **Behavior:**
+
 - Installed in root `node_modules` (hoisting)
 - Available to all workspaces
 - Same version used across project
@@ -197,13 +208,14 @@ systemvibe/
 // apps/api/package.json
 {
   "dependencies": {
-    "@systemvibe/database": "^0.1.0",  // Local package
-    "@systemvibe/redis": "^0.1.0"       // Local package
+    "@systemvibe/database": "^0.1.0", // Local package
+    "@systemvibe/redis": "^0.1.0" // Local package
   }
 }
 ```
 
 **Behavior:**
+
 - npm creates symlink from `node_modules/@systemvibe/database` → `packages/database`
 - Changes in `packages/database` immediately available to `apps/api`
 - No need to publish to npm registry
@@ -221,6 +233,7 @@ systemvibe/
 ```
 
 **Behavior:**
+
 - Only needed for development
 - Not installed in production
 - Hoisted to root `node_modules`
@@ -238,6 +251,7 @@ npm install -w apps/api bcrypt
 ```
 
 **What happens:**
+
 1. `bcrypt` added to `apps/api/package.json`
 2. `bcrypt` installed in root `node_modules`
 3. If `bcrypt` already exists, no re-install
@@ -250,6 +264,7 @@ npm install
 ```
 
 **What happens:**
+
 1. Reads all workspace `package.json` files
 2. Installs all dependencies
 3. Hoists common dependencies to root
@@ -263,6 +278,7 @@ npm install --workspace=apps/api @systemvibe/database
 ```
 
 **What happens:**
+
 1. Adds to `apps/api/package.json`
 2. Creates symlink to `packages/database`
 3. No npm registry download needed
@@ -270,6 +286,7 @@ npm install --workspace=apps/api @systemvibe/database
 ### Dependency Hoisting
 
 **Before hoisting (traditional):**
+
 ```
 apps/api/node_modules/bcrypt/
 apps/api/node_modules/@nestjs/common/
@@ -278,6 +295,7 @@ packages/database/node_modules/@nestjs/common/  # Duplicate!
 ```
 
 **After hoisting (workspaces):**
+
 ```
 node_modules/bcrypt/              # Single copy
 node_modules/@nestjs/common/     # Single copy
@@ -286,6 +304,7 @@ packages/database/node_modules/@systemvibe/redis -> ../../packages/redis
 ```
 
 **Benefits:**
+
 - Less disk space
 - Faster install times
 - Consistent versions across project
@@ -340,11 +359,13 @@ npm run build
 ```
 
 **What happens:**
+
 1. Finds all workspaces
 2. Runs `npm run build` in each workspace
 3. Reports results for each
 
 **Output example:**
+
 ```
 > systemvibe@0.1.0 build
 > npm run build --ws
@@ -449,22 +470,25 @@ npm install
 ### 1. Naming Conventions
 
 **Use scoped names for packages:**
+
 ```json
 {
-  "name": "@systemvibe/database"  // Good
+  "name": "@systemvibe/database" // Good
 }
 ```
 
 **Avoid generic names:**
+
 ```json
 {
-  "name": "database"  // Bad - could conflict with npm registry
+  "name": "database" // Bad - could conflict with npm registry
 }
 ```
 
 ### 2. Version Management
 
 **Keep versions in sync:**
+
 ```json
 // packages/database/package.json
 {
@@ -482,11 +506,13 @@ npm install
 ### 3. Dependency Organization
 
 **Put shared code in packages:**
+
 - Database client → `packages/database`
 - Redis utilities → `packages/redis`
 - Shared types → `packages/shared`
 
 **Put deployable code in apps:**
+
 - API server → `apps/api`
 - Worker → `apps/worker`
 - Webhook handler → `apps/webhook`
@@ -512,6 +538,7 @@ build/
 ### 5. CI/CD
 
 **Build all workspaces:**
+
 ```yaml
 # .github/workflows/ci.yml
 - name: Install dependencies
@@ -531,12 +558,14 @@ build/
 ### Issue: Workspace not recognized
 
 **Problem:**
+
 ```bash
 npm workspaces list
 # Doesn't show new workspace
 ```
 
 **Solution:**
+
 1. Check root `package.json` has correct workspace pattern
 2. Ensure workspace has `package.json`
 3. Run `npm install` to refresh
@@ -544,11 +573,13 @@ npm workspaces list
 ### Issue: Dependency not found
 
 **Problem:**
+
 ```bash
 Error: Cannot find module '@systemvibe/database'
 ```
 
 **Solution:**
+
 ```bash
 # Install the workspace dependency
 npm install --workspace=apps/api @systemvibe/database
@@ -560,11 +591,13 @@ npm install
 ### Issue: Version conflicts
 
 **Problem:**
+
 ```bash
 npm ERR! peer dep missing: @nestjs/common@^10.0.0
 ```
 
 **Solution:**
+
 ```bash
 # Install missing peer dependency
 npm install --workspace=apps/api @nestjs/common@^10.0.0
@@ -573,11 +606,13 @@ npm install --workspace=apps/api @nestjs/common@^10.0.0
 ### Issue: Hoisting problems
 
 **Problem:**
+
 ```bash
 Error: Multiple versions of same package
 ```
 
 **Solution:**
+
 ```bash
 # Clean install
 rm -rf node_modules
@@ -600,6 +635,7 @@ npm install --workspace=apps/api axios
 ```
 
 **Result:**
+
 - `axios` added to `apps/api/package.json`
 - `axios` installed in root `node_modules`
 - Available to all workspaces
@@ -608,14 +644,15 @@ npm install --workspace=apps/api axios
 
 ```typescript
 // apps/api/src/some.service.ts
-import { PrismaClient } from '@prisma/client';  // External
-import getRedisClient from '@systemvibe/redis'; // Local workspace
+import { PrismaClient } from "@prisma/client"; // External
+import getRedisClient from "@systemvibe/redis"; // Local workspace
 
 const prisma = new PrismaClient();
 const redis = getRedisClient();
 ```
 
 **How it works:**
+
 1. `@prisma/client` from npm registry
 2. `@systemvibe/redis` symlinked to `packages/redis`
 3. Both available via import

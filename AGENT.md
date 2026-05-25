@@ -983,6 +983,17 @@ Worker (processes) → Job
 - Environment management
 - Modular project structure
 - Swagger/OpenAPI documentation setup
+- Centralized environment configuration with validation
+
+**Environment Configuration**:
+
+- Created `packages/config/` for centralized env management
+- Uses Zod for runtime validation of environment variables
+- Single source of truth for all env vars across services
+- Type-safe configuration with TypeScript
+- Fail-fast validation on startup if env vars are missing or invalid
+- Docker Compose uses `env_file` to load `.env` from root
+- All services import from `@systemvibe/config` instead of `process.env` directly
 
 ---
 

@@ -16,10 +16,12 @@ SystemVibe is a scalable backend infrastructure designed for distributed applica
 
 - **Backend**: NestJS (Node.js/TypeScript)
 - **Database**: PostgreSQL 16
-- **Cache/Queue**: Redis 7
+- **Cache/Queue**: Redis 7 with BullMQ
 - **ORM**: Prisma
+- **Image Processing**: Sharp
 - **Containerization**: Docker & Docker Compose
 - **Reverse Proxy**: Nginx
+- **Logging**: Pino with pino-pretty
 
 ## Prerequisites
 
@@ -48,6 +50,7 @@ This will start:
 - PostgreSQL on port 5433
 - Redis on port 6379
 - API Server on port 3000
+- Image Worker (background job processing)
 - Nginx on port 80
 
 ### 3. Verify services are running
@@ -84,7 +87,10 @@ system-vibe/
 │   └── api/                 # NestJS API application
 │       ├── src/
 │       │   ├── modules/     # Feature modules
-│       │   │   └── health/  # Health check module
+│       │   │   ├── health/  # Health check module
+│       │   │   ├── auth/    # Authentication module
+│       │   │   ├── jobs/    # Job queue module
+│       │   │   └── queue/   # BullMQ configuration
 │       │   ├── common/      # Common utilities
 │       │   ├── config/      # Configuration
 │       │   ├── guards/      # Auth guards
@@ -94,17 +100,41 @@ system-vibe/
 │       ├── package.json
 │       └── tsconfig.json
 ├── packages/
+│   ├── config/              # Centralized environment configuration
+│   │   ├── src/
+│   │   │   ├── env.ts       # Zod validation schema
+│   │   │   └── index.ts     # Export typed config
+│   │   └── package.json
 │   ├── database/            # Prisma ORM configuration
 │   │   ├── prisma/
 │   │   │   └── schema.prisma
+│   │   ├── src/
+│   │   │   ├── prisma.service.ts
+│   │   │   └── prisma.module.ts
 │   │   └── migrations/
 │   ├── redis/               # Redis utilities
+│   │   ├── src/
+│   │   │   └── index.ts
+│   │   └── package.json
+│   ├── worker-image/        # Image processing worker
+│   │   ├── src/
+│   │   │   ├── main.ts
+│   │   │   ├── worker.module.ts
+│   │   │   ├── image.processor.ts
+│   │   │   └── redis-config.service.ts
+│   │   ├── Dockerfile
+│   │   └── package.json
 │   └── shared/              # Shared utilities
 ├── infra/
 │   └── docker/
 │       ├── docker-compose.yml
 │       └── nginx.conf
 ├── docs/                    # Documentation
+│   └── implementation/      # Phase implementation guides
+│       ├── PHASE_1_GETTING_STARTED.md
+│       ├── PHASE_2_AUTHENTICATION.md
+│       ├── PHASE_3_JOB_QUEUE.md
+│       └── PHASE_4_WORKER.md
 ├── .env.example             # Environment variables template
 └── package.json             # Root package.json
 ```
@@ -153,8 +183,9 @@ docker compose up --scale worker=5
 
 **Current packages**:
 
+- `packages/config/` - Centralized environment configuration with Zod validation
 - `packages/database/` - Prisma ORM client and schema
-- `packages/redis/` - Redis connection utilities (to be implemented)
+- `packages/redis/` - Redis connection utilities
 - `packages/shared/` - Common types, interfaces, utilities (to be implemented)
 
 **Why separate packages?**
@@ -212,6 +243,15 @@ model Job {
 
 - If database code lived in API, API might need to import from database later
 - Separation prevents circular dependencies between packages
+
+**G. Centralized Configuration**
+
+- `packages/config/` provides single source of truth for environment variables
+- Uses Zod for runtime validation - fail fast if env vars are missing or invalid
+- Type-safe configuration with TypeScript
+- All services import from `@systemvibe/config` instead of `process.env` directly
+- Eliminates duplicate env config across services
+- Easy to add new env vars with validation rules
 
 ---
 
@@ -306,13 +346,34 @@ Copy `.env.example` to `.env` and configure:
 cp .env.example .env
 ```
 
+**Note**: When using Docker, PostgreSQL runs on port 5433 (mapped from container port 5432).
+
 Available variables:
 
-- `NODE_ENV`: development | production
+- `DATABASE_URL`: PostgreSQL connection string
 - `DB_USER`: PostgreSQL username (default: systemvibe)
 - `DB_PASSWORD`: PostgreSQL password (default: devpassword)
 - `DB_NAME`: PostgreSQL database name (default: systemvibe)
+- `API_PORT`: API server port (default: 3000)
+- `NODE_ENV`: development | production
 - `REDIS_URL`: Redis connection string
+- `REDIS_HOST`: Redis host (default: localhost)
+- `REDIS_PORT`: Redis port (default: 6379)
+- `JWT_SECRET`: JWT secret key
+- `JWT_REFRESH_SECRET`: JWT refresh token secret
+- `JWT_EXPIRES_IN`: JWT token expiration (default: 15m)
+- `JWT_REFRESH_EXPIRES_IN`: JWT refresh token expiration (default: 7d)
+- `LOG_LEVEL`: Worker log level (error, warn, info, debug)
+
+**Environment Configuration**:
+
+The project uses a centralized configuration package (`packages/config/`) with Zod validation:
+
+- All environment variables are validated at startup
+- Type-safe configuration with TypeScript
+- Single source of truth across all services
+- Services import from `@systemvibe/config` instead of using `process.env` directly
+- Docker Compose loads env vars from `.env` file using `env_file` directive
 
 ## Development
 
@@ -762,6 +823,20 @@ docker compose down -v
 - [x] Job cancellation endpoint
 - [x] Automatic retry with exponential backoff
 - [x] Swagger documentation for all endpoints
+- [x] Unit tests for JobsService
+- [x] E2E tests for JobsController
+- [x] BullMQ Board UI for queue monitoring
+
+### Phase 4: Worker Implementation ✅
+
+- [x] Worker package structure with NestJS
+- [x] BullMQ worker configuration with Redis
+- [x] Image processing processor (resize, thumbnail, compress)
+- [x] Worker heartbeat mechanism for health monitoring
+- [x] Docker containerization for workers
+- [x] Worker service in Docker Compose
+- [x] Graceful shutdown handling
+- [x] Job event logging (active, completed, failed)
 
 ## Contributing
 

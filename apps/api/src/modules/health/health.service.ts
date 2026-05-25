@@ -10,7 +10,7 @@ export class HealthService implements OnModuleInit, OnModuleDestroy {
   private redisClient!: Redis;
   private dbConnected = false;
 
-  constructor(@InjectQueue('jobs') private jobsQueue: Queue) {}
+  constructor(@InjectQueue('image') private imageQueue: Queue) {}
 
   async onModuleInit() {
     this.dbClient = new Client({
@@ -60,7 +60,7 @@ export class HealthService implements OnModuleInit, OnModuleDestroy {
     }
 
     try {
-      await this.jobsQueue.getJobCounts();
+      await this.imageQueue.getJobCounts();
       queueStatus = 'healthy';
     } catch (error) {
       console.error('Queue health check error:', error);

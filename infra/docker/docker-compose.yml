@@ -5,10 +5,12 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: systemvibe-postgres
+    env_file:
+      - ../../.env
     environment:
-      POSTGRES_USER: ${DB_USER:-systemvibe}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-devpassword}
-      POSTGRES_DB: ${DB_NAME:-systemvibe}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
@@ -57,10 +59,10 @@ services:
       context: ../../
       dockerfile: apps/api/Dockerfile
     container_name: systemvibe-api
+    env_file:
+      - ../../.env
     environment:
-      NODE_ENV: development
-      API_PORT: 3000
-      DATABASE_URL: postgresql://${DB_USER:-systemvibe}:${DB_PASSWORD:-devpassword}@postgres:5432/${DB_NAME:-systemvibe}
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
       REDIS_URL: redis://redis:6379
     depends_on:
       postgres:
@@ -74,6 +76,23 @@ services:
       - ../../apps/api/package.json:/app/package.json:ro
       - ../../apps/api/tsconfig.json:/app/tsconfig.json:ro
     command: npm run start:dev
+    networks:
+      - systemvibe
+
+  # Image Worker
+  worker-image:
+    build:
+      context: ../../
+      dockerfile: packages/worker-image/Dockerfile
+    container_name: systemvibe-worker-image
+    env_file:
+      - ../../.env
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    depends_on:
+      redis:
+        condition: service_healthy
     networks:
       - systemvibe
 

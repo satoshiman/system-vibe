@@ -25,6 +25,7 @@
     "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^10.0.0",
     "@nestjs/swagger": "^7.4.2",
+    "@systemvibe/config": "^1.0.0",
     "@systemvibe/database": "^0.1.0",
     "@systemvibe/redis": "^0.1.0",
     "bcrypt": "^6.0.0",

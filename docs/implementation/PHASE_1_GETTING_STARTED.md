@@ -236,6 +236,7 @@ cat > apps/api/src/main.ts << 'EOF'
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import * as pino from 'pino';
+import { env } from '@systemvibe/config';
 
 const logger = pino();
 
@@ -244,7 +245,7 @@ async function bootstrap() {
 
   app.setGlobalPrefix('api');
 
-  const port = process.env.API_PORT || 3000;
+  const port = env.API_PORT;
   await app.listen(port, '0.0.0.0');
 
   logger.info(`API Server running on http://localhost:${port}`);
@@ -697,6 +698,30 @@ npm run build --workspace=apps/api
 ✅ Basic logging setup
 ✅ Database initialization with Prisma
 ✅ Reverse proxy pattern with Nginx
+✅ Centralized environment configuration with validation
+
+**Environment Configuration**:
+
+Phase 1 includes centralized environment configuration management:
+
+- Created `packages/config/` for centralized env management
+- Uses Zod for runtime validation of environment variables
+- Single source of truth for all env vars across services
+- Type-safe configuration with TypeScript
+- Fail-fast validation on startup if env vars are missing or invalid
+- Docker Compose uses `env_file` to load `.env` from root
+- All services import from `@systemvibe/config` instead of `process.env` directly
+
+**To use centralized config in your code**:
+
+```typescript
+import { env } from "@systemvibe/config";
+
+// Access environment variables with type safety
+const dbUrl = env.DATABASE_URL;
+const port = env.API_PORT;
+const logLevel = env.LOG_LEVEL;
+```
 
 ---
 
