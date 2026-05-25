@@ -732,6 +732,400 @@ describe("Jobs (e2e)", () => {
 });
 ```
 
+### Example 5: Unit Test - WebSocket Gateway
+
+**File:** `src/modules/websocket/websocket.gateway.spec.ts`
+
+```typescript
+import { Test, TestingModule } from "@nestjs/testing";
+import { JobsGateway } from "./websocket.gateway";
+
+describe("JobsGateway", () => {
+  let gateway: JobsGateway;
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [JobsGateway],
+    }).compile();
+
+    gateway = module.get<JobsGateway>(JobsGateway);
+  });
+
+  it("should be defined", () => {
+    expect(gateway).toBeDefined();
+  });
+
+  describe("broadcastJobStatus", () => {
+    it("should broadcast job status to subscribers", () => {
+      const jobId = "test-job-id";
+      const data = { status: "COMPLETED", result: { success: true } };
+
+      // Mock the server's to method
+      gateway.server = {
+        to: jest.fn().mockReturnThis(),
+        emit: jest.fn(),
+      } as any;
+
+      gateway.broadcastJobStatus(jobId, data);
+
+      expect(gateway.server.to).toHaveBeenCalledWith(`job:${jobId}`);
+      expect(gateway.server.emit).toHaveBeenCalledWith("job:status", {
+        jobId,
+        ...data,
+        timestamp: expect.any(String),
+      });
+    });
+  });
+
+  describe("broadcastJobProgress", () => {
+    it("should broadcast job progress to subscribers", () => {
+      const jobId = "test-job-id";
+      const data = { progress: 50, message: "Processing..." };
+
+      gateway.server = {
+        to: jest.fn().mockReturnThis(),
+        emit: jest.fn(),
+      } as any;
+
+      gateway.broadcastJobProgress(jobId, data);
+
+      expect(gateway.server.to).toHaveBeenCalledWith(`job:${jobId}`);
+      expect(gateway.server.emit).toHaveBeenCalledWith("job:progress", {
+        jobId,
+        ...data,
+        timestamp: expect.any(String),
+      });
+    });
+  });
+});
+```
+
+### Example 6: Unit Test - Pub/Sub Service
+
+**File:** `src/modules/websocket/pubsub.service.spec.ts`
+
+```typescript
+import { Test, TestingModule } from "@nestjs/testing";
+import { PubSubService } from "./pubsub.service";
+import { JobsGateway } from "./websocket.gateway";
+
+describe("PubSubService", () => {
+  let service: PubSubService;
+  let mockGateway: Partial<JobsGateway>;
+
+  beforeEach(async () => {
+    // Mock the gateway
+    mockGateway = {
+      broadcastJobStatus: jest.fn(),
+      broadcastJobProgress: jest.fn(),
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        PubSubService,
+        {
+          provide: JobsGateway,
+          useValue: mockGateway,
+        },
+      ],
+    }).compile();
+
+    service = module.get<PubSubService>(PubSubService);
+  });
+
+  it("should be defined", () => {
+    expect(service).toBeDefined();
+  });
+
+  describe("handleJobStatus", () => {
+    it("should call gateway broadcastJobStatus", () => {
+      const event = {
+        jobId: "test-job-id",
+        status: "COMPLETED",
+        result: { success: true },
+      };
+
+      // Access private method for testing
+      (service as any).handleJobStatus(event);
+
+      expect(mockGateway.broadcastJobStatus).toHaveBeenCalledWith(event.jobId, {
+        status: event.status,
+        result: event.result,
+        error: undefined,
+      });
+    });
+  });
+
+  describe("handleJobProgress", () => {
+    it("should call gateway broadcastJobProgress", () => {
+      const event = {
+        jobId: "test-job-id",
+        progress: 75,
+        message: "Almost done",
+      };
+
+      (service as any).handleJobProgress(event);
+
+      expect(mockGateway.broadcastJobProgress).toHaveBeenCalledWith(
+        event.jobId,
+        {
+          progress: event.progress,
+          message: event.message,
+        },
+      );
+    });
+  });
+});
+```
+
+### Example 7: E2E Test - WebSocket Real-time Updates
+
+**File:** `test/websocket.e2e-spec.ts`
+
+```typescript
+import { Test, TestingModule } from "@nestjs/testing";
+import { INestApplication } from "@nestjs/common";
+import { io, Socket } from "socket.io-client";
+import { AppModule } from "../src/app.module";
+
+describe("WebSocket (e2e)", () => {
+  let app: INestApplication;
+  let clientSocket: Socket;
+
+  beforeAll(async () => {
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
+
+    app = moduleFixture.createNestApplication();
+    await app.init();
+    await app.listen(3001); // Use different port for testing
+  });
+
+  afterAll(async () => {
+    if (clientSocket) {
+      clientSocket.disconnect();
+    }
+    await app.close();
+  });
+
+  it("should connect to WebSocket server", (done) => {
+    clientSocket = io("http://localhost:3001", {
+      transports: ["websocket"],
+    });
+
+    clientSocket.on("connect", () => {
+      expect(clientSocket.connected).toBe(true);
+      done();
+    });
+
+    clientSocket.on("connect_error", (error) => {
+      done(error);
+    });
+  });
+
+  it("should subscribe to job updates", (done) => {
+    const jobId = "test-job-id";
+
+    clientSocket.emit("subscribe:job", jobId);
+
+    clientSocket.on("job:status", (data) => {
+      expect(data).toHaveProperty("jobId");
+      expect(data).toHaveProperty("status");
+      expect(data).toHaveProperty("timestamp");
+      done();
+    });
+  });
+
+  it("should unsubscribe from job updates", (done) => {
+    const jobId = "test-job-id";
+
+    clientSocket.emit("unsubscribe:job", jobId);
+
+    // Verify no more events received after unsubscribe
+    setTimeout(() => {
+      done();
+    }, 100);
+  });
+});
+```
+
+### Example 8: Integration Test - Redis Pub/Sub
+
+**File:** `src/modules/websocket/pubsub.service.spec.ts` (Integration)
+
+```typescript
+import { Test, TestingModule } from "@nestjs/testing";
+import { PubSubService } from "./pubsub.service";
+import { JobsGateway } from "./websocket.gateway";
+import getRedisClient from "@systemvibe/redis";
+
+describe("PubSubService (Integration)", () => {
+  let service: PubSubService;
+  let gateway: JobsGateway;
+  let redis;
+
+  beforeAll(async () => {
+    redis = getRedisClient();
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [PubSubService, JobsGateway],
+    }).compile();
+
+    service = module.get<PubSubService>(PubSubService);
+    gateway = module.get<JobsGateway>(JobsGateway);
+  });
+
+  afterAll(async () => {
+    await redis.quit();
+  });
+
+  it("should receive job status events from Redis", async (done) => {
+    const jobId = `test-job-${Date.now()}`;
+    const eventData = {
+      jobId,
+      status: "COMPLETED",
+      result: { success: true },
+    };
+
+    // Subscribe to the event
+    gateway.server = {
+      to: jest.fn().mockReturnThis(),
+      emit: jest.fn((event, data) => {
+        expect(event).toBe("job:status");
+        expect(data.jobId).toBe(jobId);
+        expect(data.status).toBe("COMPLETED");
+        done();
+      }),
+    } as any;
+
+    // Publish event to Redis
+    await redis.publish("job:status", JSON.stringify(eventData));
+  }, 5000);
+});
+```
+
+---
+
+## Testing Real-time Features
+
+### Testing WebSocket Connections
+
+**Approach:**
+
+1. **Unit Tests:** Mock Socket.IO server and client
+2. **Integration Tests:** Test with real Redis Pub/Sub
+3. **E2E Tests:** Test complete WebSocket flow with real server
+
+**Key Considerations:**
+
+- WebSocket connections are stateful - need proper cleanup
+- Real-time events may be asynchronous - use timeouts
+- Redis Pub/Sub is fire-and-forget - ensure subscribers are ready
+- Use different ports for testing to avoid conflicts
+
+### Testing Pub/Sub Events
+
+**Mocking Redis for Unit Tests:**
+
+```typescript
+jest.mock("@systemvibe/redis", () => ({
+  getRedisClient: jest.fn(() => ({
+    subscribe: jest.fn(),
+    on: jest.fn(),
+    publish: jest.fn(),
+  })),
+}));
+```
+
+**Testing with Real Redis (Integration):**
+
+```typescript
+beforeAll(async () => {
+  redis = getRedisClient();
+  await redis.flushall(); // Clear previous test data
+});
+
+afterAll(async () => {
+  await redis.flushall();
+  await redis.quit();
+});
+```
+
+### Testing Worker Event Publishing
+
+**File:** `apps/worker-image/src/image.processor.spec.ts`
+
+```typescript
+import { Processor, WorkerHost } from "@nestjs/bullmq";
+import { Job } from "bullmq";
+
+describe("ImageProcessor", () => {
+  let processor: ImageProcessor;
+  let mockRedis;
+
+  beforeEach(() => {
+    mockRedis = {
+      publish: jest.fn(),
+    };
+    processor = new ImageProcessor();
+    (processor as any).redis = mockRedis;
+  });
+
+  describe("onActive", () => {
+    it("should publish PROCESSING status to Redis", async () => {
+      const job = { id: "test-job-id", name: "image-resize" } as Job;
+
+      await processor.onActive(job);
+
+      expect(mockRedis.publish).toHaveBeenCalledWith(
+        "job:status",
+        JSON.stringify({
+          jobId: job.id,
+          status: "PROCESSING",
+        }),
+      );
+    });
+  });
+
+  describe("onCompleted", () => {
+    it("should publish COMPLETED status with result", async () => {
+      const job = { id: "test-job-id", name: "image-resize" } as Job;
+      const result = { success: true, outputUrl: "http://example.com" };
+
+      await processor.onCompleted(job, result);
+
+      expect(mockRedis.publish).toHaveBeenCalledWith(
+        "job:status",
+        JSON.stringify({
+          jobId: job.id,
+          status: "COMPLETED",
+          result,
+        }),
+      );
+    });
+  });
+
+  describe("onFailed", () => {
+    it("should publish FAILED status with error", async () => {
+      const job = { id: "test-job-id", name: "image-resize" } as Job;
+      const error = new Error("Processing failed");
+
+      await processor.onFailed(job, error);
+
+      expect(mockRedis.publish).toHaveBeenCalledWith(
+        "job:status",
+        JSON.stringify({
+          jobId: job.id,
+          status: "FAILED",
+          error: error.message,
+        }),
+      );
+    });
+  });
+});
+```
+
 ---
 
 ## Common Testing Scenarios

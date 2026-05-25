@@ -1,0 +1,207 @@
+<!doctype html>
+<html>
+  <head>
+    <title>SystemVibe - WebSocket Test Client</title>
+    <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        padding: 20px;
+        max-width: 800px;
+        margin: 0 auto;
+      }
+      h1 {
+        color: #333;
+      }
+      .controls {
+        margin-bottom: 20px;
+        padding: 15px;
+        background: #f5f5f5;
+        border-radius: 5px;
+      }
+      input {
+        padding: 10px;
+        margin: 5px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        width: 300px;
+      }
+      button {
+        padding: 10px 20px;
+        margin: 5px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        background: #007bff;
+        color: white;
+      }
+      button:hover {
+        background: #0056b3;
+      }
+      button.clear {
+        background: #6c757d;
+      }
+      button.clear:hover {
+        background: #545b62;
+      }
+      #log {
+        background: #1e1e1e;
+        color: #00ff00;
+        padding: 15px;
+        margin-top: 20px;
+        min-height: 300px;
+        max-height: 500px;
+        overflow-y: auto;
+        border-radius: 5px;
+        font-family: "Courier New", monospace;
+        font-size: 12px;
+      }
+      .status {
+        padding: 10px;
+        margin: 10px 0;
+        border-radius: 4px;
+      }
+      .status.connected {
+        background: #d4edda;
+        color: #155724;
+      }
+      .status.disconnected {
+        background: #f8d7da;
+        color: #721c24;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>SystemVibe - WebSocket Test Client</h1>
+
+    <div id="connectionStatus" class="status disconnected">
+      Status: Disconnected
+    </div>
+
+    <div class="controls">
+      <input
+        type="text"
+        id="jobId"
+        placeholder="Enter Job ID"
+        style="width: 300px"
+      />
+      <button onclick="subscribe()">Subscribe</button>
+      <button onclick="unsubscribe()">Unsubscribe</button>
+      <button class="clear" onclick="clearLog()">Clear Log</button>
+    </div>
+
+    <div class="controls">
+      <h3>Quick Demo</h3>
+      <button onclick="createAndSubscribeJob()" style="background: #28a745">
+        Create Job & Subscribe
+      </button>
+    </div>
+
+    <pre id="log"></pre>
+
+    <script>
+      const socket = io("http://localhost:3000");
+      const log = document.getElementById("log");
+      const statusDiv = document.getElementById("connectionStatus");
+
+      function appendLog(message) {
+        const timestamp = new Date().toISOString();
+        log.textContent += `[${timestamp}] ${message}\n`;
+        log.scrollTop = log.scrollHeight;
+      }
+
+      socket.on("connect", () => {
+        statusDiv.className = "status connected";
+        statusDiv.textContent = "Status: Connected";
+        appendLog("Connected to WebSocket server");
+      });
+
+      socket.on("disconnect", () => {
+        statusDiv.className = "status disconnected";
+        statusDiv.textContent = "Status: Disconnected";
+        appendLog("Disconnected from WebSocket server");
+      });
+
+      socket.on("connect_error", (error) => {
+        appendLog("Connection error: " + error.message);
+      });
+
+      socket.on("job:status", (data) => {
+        appendLog("Job Status Update:");
+        appendLog(JSON.stringify(data, null, 2));
+      });
+
+      socket.on("job:progress", (data) => {
+        appendLog("Job Progress Update:");
+        appendLog(JSON.stringify(data, null, 2));
+      });
+
+      function subscribe() {
+        const jobId = document.getElementById("jobId").value.trim();
+        if (!jobId) {
+          alert("Please enter a Job ID");
+          return;
+        }
+        socket.emit("subscribe:job", jobId);
+        appendLog(`Subscribed to job: ${jobId}`);
+      }
+
+      function unsubscribe() {
+        const jobId = document.getElementById("jobId").value.trim();
+        if (!jobId) {
+          alert("Please enter a Job ID");
+          return;
+        }
+        socket.emit("unsubscribe:job", jobId);
+        appendLog(`Unsubscribed from job: ${jobId}`);
+      }
+
+      function clearLog() {
+        log.textContent = "";
+      }
+
+      async function createAndSubscribeJob() {
+        appendLog("Creating new job...");
+
+        const jobData = {
+          type: "image-resize",
+          payload: {
+            imageUrl: "https://example.com/image.jpg",
+            width: 800,
+            height: 600,
+          },
+        };
+
+        try {
+          const response = await fetch("http://localhost:3000/api/jobs", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(jobData),
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+
+          const job = await response.json();
+          const jobId = job.id;
+
+          appendLog(`Job created successfully: ${jobId}`);
+          document.getElementById("jobId").value = jobId;
+
+          // Subscribe to the job
+          socket.emit("subscribe:job", jobId);
+          appendLog(`Subscribed to job: ${jobId}`);
+          appendLog("Waiting for job status updates...");
+        } catch (error) {
+          appendLog("Error creating job: " + error.message);
+        }
+      }
+
+      // Auto-connect message
+      appendLog("WebSocket test client loaded. Waiting for connection...");
+    </script>
+  </body>
+</html>

@@ -874,6 +874,15 @@ docker compose down -v
 - [x] Graceful shutdown handling
 - [x] Job event logging (active, completed, failed)
 
+### Phase 5: Real-time Updates via WebSocket ✅
+
+- [x] Socket.IO setup with NestJS WebSocket gateway
+- [x] Job status broadcasts via WebSocket
+- [x] Redis Pub/Sub for worker-to-API communication
+- [x] Worker publishes job status events (PROCESSING, COMPLETED, FAILED)
+- [x] Client subscription to job-specific channels
+- [x] Real-time progress updates support
+
 ## Contributing
 
 1. Fork the repository

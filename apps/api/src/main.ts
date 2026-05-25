@@ -13,6 +13,13 @@ const logger = pino();
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  // Enable CORS
+  app.enableCors({
+    origin: '*', // Allow all origins for development
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+    credentials: true,
+  });
+
   app.setGlobalPrefix('api');
 
   // Swagger configuration
