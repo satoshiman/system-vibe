@@ -76,6 +76,42 @@ For SystemVibe, JWT should be stored in **HttpOnly Cookies** rather than localSt
 </details>
 
 <details>
+<summary>What is the difference between Redis Commander and RedisInsight?</summary>
+
+Both Redis Commander and RedisInsight are GUI tools for inspecting Redis data, but they have different characteristics:
+
+**Redis Commander (Used in SystemVibe)**
+
+- **Pros**: Lightweight, stable, web-based, easy to deploy with Docker
+- **Cons**: Less feature-rich compared to RedisInsight
+- **Best for**: Quick inspection, development environments, simple use cases
+- **Deployment**: Included in docker-compose.yml at port 8001
+- **Auto-connect**: Pre-configured to connect to `redis:6379`
+
+**RedisInsight (Official Redis GUI)**
+
+- **Pros**: Official Redis tool, more features, better UI, memory analysis, CLI browser
+- **Cons**: Heavier resource usage, can be unstable on some platforms
+- **Best for**: Production monitoring, deep analysis, advanced features
+- **Deployment**: Run separately with Docker or download desktop app
+- **Manual connect**: Must manually configure connection to Redis
+
+**SystemVibe Recommendation**:
+
+- Use **Redis Commander** for development (already in docker-compose)
+- Use **RedisInsight** if you need advanced features or production monitoring
+
+**Accessing Redis Commander in SystemVibe**:
+
+```bash
+cd infra/docker
+docker compose up -d redis-commander
+# Open http://localhost:8001
+```
+
+</details>
+
+<details>
 <summary>How to debug Redis in SystemVibe?</summary>
 
 **1. Redis CLI (Quickest)**
@@ -100,7 +136,23 @@ HGETALL your_hash_name
 MONITOR
 ```
 
-**2. RedisInsight (Recommended GUI)**
+**2. Redis Commander (Included in docker-compose)**
+
+```bash
+# Start Redis Commander with docker-compose
+cd infra/docker
+docker compose up -d redis-commander
+
+# Access dashboard
+# Open http://localhost:8001
+```
+
+- Redis Commander is pre-configured in docker-compose.yml
+- Auto-connects to Redis instance at `redis:6379`
+- Browse all keys, values, and monitor commands
+- View BullMQ queues and job data
+
+**3. RedisInsight (Alternative GUI)**
 
 ```bash
 # Download RedisInsight: https://redis.com/redis-enterprise/redis-insight/
@@ -200,6 +252,159 @@ Refresh token rotation is triggered from the client in the following scenarios:
 </details>
 
 ## Redis & Queue
+
+<details>
+<summary>What are all the Redis keys in SystemVibe?</summary>
+
+SystemVibe uses Redis for multiple purposes. Here's a breakdown of all the keys you'll see in Redis Commander:
+
+## **`bull:*` (66 keys)**
+
+**BullMQ Queue System** - Redis-based job queue library
+
+### **`bull:image:*` (47 keys)**
+
+**Image Processing Queue** - Queue for image processing jobs
+
+- `bull:image:wait` - Jobs waiting to be processed (sorted set)
+- `bull:image:active` - Jobs currently being processed (list)
+- `bull:image:completed` - Jobs that finished successfully (list)
+- `bull:image:failed` - Jobs that failed (list)
+- `bull:image:delayed` - Jobs delayed for retry (sorted set)
+- `bull:image:paused` - Jobs that are paused (sorted set)
+- `bull:image:meta` - Queue metadata (hash)
+- `bull:image:id` - Job ID counter (string)
+- `bull:image:events` - Job events (stream/list)
+- `bull:image:stalled` - Jobs that stalled (list)
+- `bull:image:priority` - Jobs by priority (sorted set)
+- `bull:image:jobs:{jobId}` - Individual job data (hash)
+
+### **`bull:jobs:*` (19 keys)**
+
+**General Jobs Queue** - Queue for general tasks (not image-specific)
+
+Same structure as `bull:image:*` but for the `jobs` queue.
+
+---
+
+## **`session:*` (113 keys)**
+
+**User Sessions** - Stores user authentication sessions
+
+- `session:{sessionId}` - Session data for each user (hash)
+  - `userId` - User ID
+  - `roles` - User roles/permissions
+  - `createdAt` - Session creation timestamp
+  - `expiresAt` - Session expiration timestamp
+  - `refreshToken` - Refresh token (if applicable)
+
+**TTL:** 24 hours (configurable)
+
+---
+
+## **`worker:*` (1 key)**
+
+**Worker Metadata** - Information about worker processes
+
+- `worker:{workerId}` - Worker metadata (hash)
+  - `lastHeartbeat` - Last heartbeat timestamp
+  - `queue` - Queue being processed
+  - `concurrency` - Number of parallel jobs
+  - `status` - Worker status
+
+---
+
+## **`heartbeat:*` (1 key)**
+
+**Worker Heartbeat Tracking** - Monitors if workers are alive
+
+- `heartbeat:worker-image-{containerId}` - Heartbeat timestamp (string)
+  - Value: ISO timestamp (e.g., `2026-05-25T09:30:00Z`)
+  - TTL: 10-30 seconds (worker must update continuously)
+
+**Mechanism:**
+
+- Worker sends heartbeat every 5 seconds
+- If key expires → worker considered dead
+- System can trigger recovery or alert
+
+---
+
+## **Summary Architecture**
+
+```
+Redis Data Structure:
+├── bull:* (Job Queues)
+│   ├── bull:image:* (Image processing)
+│   └── bull:jobs:* (General jobs)
+├── session:* (User authentication)
+├── worker:* (Worker metadata)
+└── heartbeat:* (Worker health monitoring)
+```
+
+**Purpose of each type:**
+
+- **BullMQ**: Asynchronous job processing with retry, priority
+- **Session**: Authentication state management
+- **Worker/Heartbeat**: Monitor worker health and detect failures
+
+</details>
+
+<details>
+<summary>Do completed jobs get automatically deleted from Redis?</summary>
+
+Completed jobs in Redis with BullMQ **do not automatically delete** by default. They remain in Redis until explicitly removed or configured with a TTL (Time To Live).
+
+**Default Behavior:**
+
+- Completed jobs stay in the `completed` set in Redis indefinitely
+- Failed jobs stay in the `failed` set indefinitely
+- This allows for job history, debugging, and potential retry
+
+**SystemVibe Configuration:**
+
+SystemVibe configures job retention in `apps/api/src/config/queue.config.ts`:
+
+```typescript
+defaultJobOptions: {
+  removeOnComplete: {
+    count: 1000,      // Keep last 1000 completed jobs
+    age: 86400,       // Or jobs older than 24 hours
+  },
+  removeOnFail: {
+    count: 5000,      // Keep last 5000 failed jobs
+    age: 604800,      // Or jobs older than 7 days
+  },
+}
+```
+
+**How It Works:**
+
+- BullMQ automatically cleans up jobs when they exceed the configured thresholds
+- This prevents Redis memory bloat while preserving job history for debugging
+- Jobs are removed from Redis but remain in PostgreSQL (source of truth)
+
+**API Behavior:**
+
+When a job is deleted from Redis:
+
+- API still queries PostgreSQL for job status
+- PostgreSQL is the source of truth for job data
+- Client can still retrieve job information even if Redis job is gone
+
+**Why This Architecture:**
+
+- **Redis**: Temporary queue storage with retention policy
+- **PostgreSQL**: Permanent job storage with full history
+- **API**: Always queries PostgreSQL for job status (reliable source)
+
+**If You Need Different Retention:**
+
+- Increase `count` to keep more jobs in Redis
+- Increase `age` to keep jobs longer
+- Set `removeOnComplete: true` to delete immediately (not recommended - loses debug history)
+
+</details>
 
 <details>
 <summary>What is the difference between PENDING and QUEUED job status?</summary>
@@ -420,6 +625,96 @@ BullMQ is a Redis-based queue system that enables asynchronous job processing. H
 - **Scalability**: Workers can be scaled independently based on queue length
 - **Reliability**: Redis persistence + PostgreSQL as source of truth
 - **Retry logic**: BullMQ automatically retries failed jobs
+
+</details>
+
+<details>
+<summary>Is Pub/Sub typically used with WebSocket? What are other applications?</summary>
+
+Pub/Sub is **not required** for WebSocket but is a common pattern in event-driven architectures.
+
+**When to use Pub/Sub + WebSocket:**
+
+- Multiple servers need to broadcast the same message
+- Worker services need to communicate with API servers
+- Need decoupling between publishers and subscribers
+- Horizontal scaling (multiple API instances)
+
+**When NOT to use Pub/Sub + WebSocket:**
+
+- Single server application
+- Simple direct communication
+- Low traffic
+
+**Other applications of Pub/Sub:**
+
+**1. Microservices Communication**
+
+```
+Service A → Redis Pub/Sub → Service B, C, D
+```
+
+- Order service publishes "order.created"
+- Inventory, shipping, notification services subscribe
+
+**2. Real-time Analytics**
+
+```
+User actions → Redis Pub/Sub → Analytics service
+```
+
+- Track user behavior in real-time
+- Update dashboards instantly
+
+**3. Cache Invalidation**
+
+```
+DB update → Redis Pub/Sub → Clear cache
+```
+
+- When data changes, notify all services to clear cache
+- Prevent stale data
+
+**4. Chat Applications**
+
+```
+User A → Redis Pub/Sub → Room members
+```
+
+- Group chat messages
+- Presence notifications (online/offline)
+
+**5. Live Sports/News Updates**
+
+```
+Score update → Redis Pub/Sub → All connected clients
+```
+
+- Real-time scores
+- Breaking news
+
+**Pub/Sub vs Direct WebSocket:**
+
+| Pattern                 | Pros                                             | Cons                                      |
+| ----------------------- | ------------------------------------------------ | ----------------------------------------- |
+| **Pub/Sub + WebSocket** | Scalable, decoupled, works with multiple servers | More complex, Redis dependency            |
+| **Direct WebSocket**    | Simpler, no extra infrastructure                 | Limited to single server, harder to scale |
+
+**When to use which:**
+
+**Use Pub/Sub + WebSocket when:**
+
+- Multiple API servers (load balancing)
+- Worker services publish events
+- Need fan-out (1 publisher → many subscribers)
+- Event-driven architecture
+
+**Use Direct WebSocket when:**
+
+- Single server
+- Simple notifications
+- Low scale
+- Want minimal infrastructure
 
 </details>
 

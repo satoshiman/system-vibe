@@ -26,7 +26,7 @@ npm --version     # Should be v9+
 
 # Docker & Docker Compose
 docker --version        # Docker 20.10+
-docker-compose --version # Docker Compose 2.0+
+docker compose version # Docker Compose 2.0+
 
 # Git
 git --version    # Latest version
@@ -37,7 +37,7 @@ git --version    # Latest version
 - VS Code with TypeScript extension
 - Postman or Insomnia (for testing API)
 - DBeaver or pgAdmin (for database inspection)
-- Redis Commander (for Redis inspection)
+- Redis Commander (for Redis inspection - included in docker-compose)
 
 ---
 
@@ -546,13 +546,13 @@ ls -la apps/api/dist
 cd infra/docker
 
 # Start all services
-docker-compose up
+docker compose up
 
 # In another terminal, watch logs
-docker-compose logs -f
+docker compose logs -f
 
 # Verify services are running
-docker-compose ps
+docker compose ps
 ```
 
 **Expected Output**:
@@ -643,7 +643,7 @@ git log --oneline
 
 ```bash
 # Try building again without cache
-docker-compose build --no-cache api
+docker compose build --no-cache api
 
 # Check Docker logs
 docker logs systemvibe-api
@@ -656,8 +656,8 @@ docker logs systemvibe-api
 lsof -i :5432
 
 # Clean up old volumes
-docker-compose down -v
-docker-compose up postgres
+docker compose down -v
+docker compose up postgres
 ```
 
 ### Issue: Redis connection refused
@@ -667,7 +667,7 @@ docker-compose up postgres
 docker ps | grep redis
 
 # Restart Redis
-docker-compose restart redis
+docker compose restart redis
 
 # Test connection
 docker exec systemvibe-redis redis-cli ping
@@ -749,19 +749,19 @@ git push -u origin main
 
 ```bash
 # Start everything
-cd infra/docker && docker-compose up
+cd infra/docker && docker compose up
 
 # Stop everything
-docker-compose down
+docker compose down
 
 # View logs
-docker-compose logs -f api
+docker compose logs -f api
 
 # Rebuild API
-docker-compose build api
+docker compose build api
 
 # Run API in development
-docker-compose up --build api
+docker compose up --build api
 
 # Access Postgres CLI
 docker exec -it systemvibe-postgres psql -U systemvibe
@@ -770,8 +770,8 @@ docker exec -it systemvibe-postgres psql -U systemvibe
 docker exec -it systemvibe-redis redis-cli
 
 # Rebuild from scratch (clean slate)
-docker-compose down -v
-docker-compose up --build
+docker compose down -v
+docker compose up --build
 ```
 
 ---
