@@ -258,95 +258,54 @@ Refresh token rotation is triggered from the client in the following scenarios:
 
 SystemVibe uses Redis for multiple purposes. Here's a breakdown of all the keys you'll see in Redis Commander:
 
-## **`bull:*` (66 keys)**
-
-**BullMQ Queue System** - Redis-based job queue library
-
-### **`bull:image:*` (47 keys)**
-
-**Image Processing Queue** - Queue for image processing jobs
-
-- `bull:image:wait` - Jobs waiting to be processed (sorted set)
-- `bull:image:active` - Jobs currently being processed (list)
-- `bull:image:completed` - Jobs that finished successfully (list)
-- `bull:image:failed` - Jobs that failed (list)
-- `bull:image:delayed` - Jobs delayed for retry (sorted set)
-- `bull:image:paused` - Jobs that are paused (sorted set)
-- `bull:image:meta` - Queue metadata (hash)
-- `bull:image:id` - Job ID counter (string)
-- `bull:image:events` - Job events (stream/list)
-- `bull:image:stalled` - Jobs that stalled (list)
-- `bull:image:priority` - Jobs by priority (sorted set)
-- `bull:image:jobs:{jobId}` - Individual job data (hash)
-
-### **`bull:jobs:*` (19 keys)**
-
-**General Jobs Queue** - Queue for general tasks (not image-specific)
-
-Same structure as `bull:image:*` but for the `jobs` queue.
-
----
-
-## **`session:*` (113 keys)**
-
-**User Sessions** - Stores user authentication sessions
-
-- `session:{sessionId}` - Session data for each user (hash)
-  - `userId` - User ID
-  - `roles` - User roles/permissions
-  - `createdAt` - Session creation timestamp
-  - `expiresAt` - Session expiration timestamp
-  - `refreshToken` - Refresh token (if applicable)
-
-**TTL:** 24 hours (configurable)
-
----
-
-## **`worker:*` (1 key)**
-
-**Worker Metadata** - Information about worker processes
-
-- `worker:{workerId}` - Worker metadata (hash)
-  - `lastHeartbeat` - Last heartbeat timestamp
-  - `queue` - Queue being processed
-  - `concurrency` - Number of parallel jobs
-  - `status` - Worker status
-
----
-
-## **`heartbeat:*` (1 key)**
-
-**Worker Heartbeat Tracking** - Monitors if workers are alive
-
-- `heartbeat:worker-image-{containerId}` - Heartbeat timestamp (string)
-  - Value: ISO timestamp (e.g., `2026-05-25T09:30:00Z`)
-  - TTL: 10-30 seconds (worker must update continuously)
-
-**Mechanism:**
-
-- Worker sends heartbeat every 5 seconds
-- If key expires → worker considered dead
-- System can trigger recovery or alert
-
----
-
-## **Summary Architecture**
-
 ```
-Redis Data Structure:
-├── bull:* (Job Queues)
-│   ├── bull:image:* (Image processing)
-│   └── bull:jobs:* (General jobs)
-├── session:* (User authentication)
-├── worker:* (Worker metadata)
-└── heartbeat:* (Worker health monitoring)
+Redis Keys Structure in SystemVibe
+└── bull:* (BullMQ Job Queues)
+    ├── bull:image:* (Image Processing Queue)
+    │   ├── bull:image:wait           (sorted set) - Jobs waiting to be processed
+    │   ├── bull:image:active         (list)       - Jobs currently being processed
+    │   ├── bull:image:completed       (list)       - Jobs that finished successfully
+    │   ├── bull:image:failed          (list)       - Jobs that failed
+    │   ├── bull:image:delayed         (sorted set) - Jobs delayed for retry
+    │   ├── bull:image:paused          (sorted set) - Jobs that are paused
+    │   ├── bull:image:stalled        (list)       - Jobs that stalled
+    │   ├── bull:image:priority        (sorted set) - Jobs by priority
+    │   ├── bull:image:meta            (hash)       - Queue metadata
+    │   ├── bull:image:id              (string)     - Job ID counter
+    │   ├── bull:image:events          (stream)     - Job events
+    │   └── bull:image:jobs:{jobId}    (hash)       - Individual job data (multiple keys)
+    │
+    └── bull:jobs:* (General Jobs Queue)
+        └── (Same structure as bull:image:* for general tasks)
+└── session:* (User Authentication)
+    └── session:{sessionId}            (hash)       - Session data for each user
+        ├── userId
+        ├── roles
+        ├── createdAt
+        ├── expiresAt
+        └── refreshToken
+        (TTL: 24 hours, configurable)
+└── worker:heartbeat:* (Worker Health Monitoring)
+    └── worker:heartbeat:{WORKER_ID}   (string)     - Heartbeat timestamp
+        - Value: ISO timestamp
+        - TTL: 30 seconds
+        - Worker updates every 10 seconds
 ```
 
-**Purpose of each type:**
+**Purpose of each key type:**
 
-- **BullMQ**: Asynchronous job processing with retry, priority
-- **Session**: Authentication state management
-- **Worker/Heartbeat**: Monitor worker health and detect failures
+- **`bull:*`**: BullMQ job queue system for asynchronous job processing with retry, priority, and job state management
+- **`session:*`**: User authentication session management with TTL-based expiration
+- **`worker:heartbeat:*`**: Custom SystemVibe heartbeat mechanism for worker health monitoring and fault detection
+
+**Key patterns:**
+
+- Number of keys varies dynamically based on:
+  - Number of jobs in queue (bull:image:jobs:{jobId})
+  - Number of active user sessions (session:{sessionId})
+  - Number of running workers (worker:heartbeat:{WORKER_ID})
+- BullMQ keys are managed automatically by the queue library
+- Worker heartbeat keys are managed by custom SystemVibe implementation
 
 </details>
 
