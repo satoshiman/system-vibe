@@ -198,6 +198,9 @@ export class ImageProcessor extends WorkerHost {
   }
 
   private async simulateProcessing(ms: number) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+    // Random delay between 5-15 seconds for testing
+    const randomDelay = Math.floor(Math.random() * (15000 - 5000 + 1)) + 5000;
+    logger.info(`Simulating processing with ${randomDelay}ms delay`);
+    return new Promise((resolve) => setTimeout(resolve, randomDelay));
   }
 }

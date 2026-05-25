@@ -836,32 +836,22 @@ curl http://localhost:3000/api/jobs/<job-id>
 
 ## Scaling Workers
 
-To scale workers horizontally, modify docker-compose.yml:
+**Important**: To enable scaling, the `worker-image` service must NOT have a `container_name` field in docker-compose.yml. Docker requires each container to have a unique name when scaling.
 
-```yaml
-# Scale to 3 worker instances
-worker-image:
-  build:
-    context: ../../
-    dockerfile: apps/worker-image/Dockerfile
-  env_file:
-    - ../../.env
-  environment:
-    REDIS_HOST: redis
-    REDIS_PORT: 6379
-  depends_on:
-    redis:
-      condition: service_healthy
-  networks:
-    - systemvibe
-  deploy:
-    replicas: 3 # Run 3 instances
-```
-
-Or use command line:
+To scale workers horizontally, use the command line:
 
 ```bash
-docker compose up -d --scale worker-image=3
+# Scale to 5 worker instances
+cd infra/docker
+docker compose up -d --scale worker-image=5
+```
+
+This will create 5 worker containers with auto-generated names (e.g., `docker-worker-image-1`, `docker-worker-image-2`, etc.).
+
+To return to a single worker:
+
+```bash
+docker compose up -d --scale worker-image=1
 ```
 
 ---
@@ -874,8 +864,8 @@ docker compose up -d --scale worker-image=3
 # List all active workers
 docker exec systemvibe-redis redis-cli KEYS "worker:heartbeat:*"
 
-# Get worker details
-docker exec systemvibe-redis redis-cli GET worker:heartbeat:worker-image-<id>
+# Get worker details (note: worker ID includes hostname when scaled)
+docker exec systemvibe-redis redis-cli GET worker:heartbeat:worker-image-<hostname>
 
 # Count active workers
 docker exec systemvibe-redis redis-cli KEYS "worker:heartbeat:*" | wc -l
@@ -1023,8 +1013,8 @@ docker compose logs -f worker-image
 # Restart worker
 docker compose restart worker-image
 
-# Scale workers
-docker compose up -d --scale worker-image=3
+# Scale workers (requires removing container_name from docker-compose.yml)
+docker compose up -d --scale worker-image=5
 
 # Check worker heartbeat
 docker exec systemvibe-redis redis-cli KEYS "worker:heartbeat:*"

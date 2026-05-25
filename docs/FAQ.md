@@ -396,6 +396,66 @@ Use a Deployment with `replicas: 3` and HorizontalPodAutoscaler.
 </details>
 
 <details>
+<summary>What happens when scaling up or down workers?</summary>
+
+**Scaling Up (Increasing Workers)**
+
+```bash
+docker compose up -d --scale worker-image=5
+```
+
+- New worker containers are created and started
+- Workers automatically connect to Redis queue
+- BullMQ distributes jobs to all available workers
+- No disruption to existing workers or jobs
+- Jobs in queue are processed faster with more workers
+
+**Scaling Down (Decreasing Workers)**
+
+```bash
+docker compose up -d --scale worker-image=1
+```
+
+- Docker sends SIGTERM signal to workers being stopped
+- Workers complete current job before shutting down (graceful shutdown)
+- Workers stop accepting new jobs during shutdown
+- If job doesn't complete in time, it's requeued for remaining workers
+- No jobs are lost - queue persists in Redis
+
+**What happens to jobs during scale down?**
+
+1. **Jobs currently processing**: Worker attempts to complete before shutdown
+2. **Jobs not started**: Remain in queue, picked up by remaining workers
+3. **Jobs that timeout during shutdown**: Requeued automatically by BullMQ
+
+**Graceful Shutdown in SystemVibe**
+
+The worker has graceful shutdown implemented in `apps/worker-image/src/main.ts`:
+
+```typescript
+process.on("SIGTERM", async () => {
+  logger.info("SIGTERM received, shutting down gracefully...");
+  await app.close();
+  process.exit(0);
+});
+```
+
+BullMQ worker handles:
+
+- Completing active jobs
+- Not accepting new jobs
+- Requeueing incomplete jobs
+
+**Best Practices**
+
+- Scale down gradually to allow jobs to complete
+- Monitor queue length before scaling down
+- Use health checks to ensure workers are ready before scaling up
+- Consider implementing auto-scaling based on queue depth
+
+</details>
+
+<details>
 <summary>What are the criteria for creating a worker? Why not use an API instead?</summary>
 
 **Criteria for Creating a Worker:**

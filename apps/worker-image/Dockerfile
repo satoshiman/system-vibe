@@ -24,6 +24,9 @@ COPY apps/worker-image/src ./apps/worker-image/src
 # Install all dependencies (needed for TypeScript build)
 RUN npm install
 
+# Install worker-image specific dependencies
+RUN npm install --workspace=apps/worker-image
+
 # Build TypeScript
 RUN npm run build --workspace=apps/worker-image
 
@@ -35,14 +38,21 @@ RUN apk add --no-cache \
 
 WORKDIR /app
 
-# Copy built files and dependencies from builder
+# Copy entire worker-image directory from builder (includes node_modules)
+COPY --from=builder /app/apps/worker-image ./apps/worker-image
+
+# Copy shared packages
+COPY --from=builder /app/packages/config ./packages/config
+COPY --from=builder /app/packages/redis ./packages/redis
+
+# Copy root node_modules for workspace resolution
 COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/apps/worker-image/dist ./dist
-COPY --from=builder /app/apps/worker-image/package.json ./
+COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/package-lock.json ./package-lock.json
 
 # Set environment variables
 ENV NODE_ENV=production
 ENV LOG_LEVEL=info
 
 # Start the worker
-CMD ["node", "dist/main.js"]
+CMD ["node", "apps/worker-image/dist/main.js"]
