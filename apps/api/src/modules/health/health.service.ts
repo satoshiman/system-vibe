@@ -38,6 +38,7 @@ export class HealthService implements OnModuleInit, OnModuleDestroy {
     let dbStatus = 'unknown';
     let redisStatus = 'unknown';
     let queueStatus = 'unknown';
+    let workerStatus = 'unknown';
     const authStatus = 'healthy';
 
     try {
@@ -68,8 +69,19 @@ export class HealthService implements OnModuleInit, OnModuleDestroy {
       queueStatus = 'unhealthy';
     }
 
+    try {
+      const workers = await this.imageQueue.getWorkers();
+      workerStatus = workers.length > 0 ? 'healthy' : 'unhealthy';
+    } catch (error) {
+      console.error('Worker health check error:', error);
+      workerStatus = 'unhealthy';
+    }
+
     const overallStatus =
-      dbStatus === 'healthy' && redisStatus === 'healthy' && queueStatus === 'healthy'
+      dbStatus === 'healthy' &&
+      redisStatus === 'healthy' &&
+      queueStatus === 'healthy' &&
+      workerStatus === 'healthy'
         ? 'healthy'
         : 'degraded';
 
@@ -81,6 +93,7 @@ export class HealthService implements OnModuleInit, OnModuleDestroy {
         database: dbStatus,
         redis: redisStatus,
         queue: queueStatus,
+        worker: workerStatus,
         auth: authStatus,
       },
       version: '0.3.0',

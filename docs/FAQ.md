@@ -608,6 +608,112 @@ Resizing a 100MB image:
 
 </details>
 
+<details>
+<summary>How does `pgrep -f node || exit 1` work as a Docker healthcheck?</summary>
+
+The command `pgrep -f node || exit 1` is used in docker-compose.yml to check if the worker-image container is healthy.
+
+**How it works:**
+
+1. **`pgrep -f node`**
+   - `pgrep`: searches for processes by pattern
+   - `-f`: searches in the full command line (not just process name)
+   - `node`: pattern to find Node.js processes
+   - If a Node.js process is found: returns exit code 0 (success) and prints the PID
+   - If no Node.js process is found: returns exit code 1 (failure)
+
+2. **`|| exit 1`**
+   - `||`: shell OR operator - only runs the next command if the previous command fails (exit code != 0)
+   - If `pgrep` finds a Node.js process (exit 0): stops there, healthcheck passes
+   - If `pgrep` doesn't find a process (exit 1): runs `exit 1`, healthcheck fails
+
+**Why this is effective for worker-image:**
+
+- Worker runs as a Node.js process, so if the Node.js process is alive, the worker is running
+- Simple and doesn't require exposing an HTTP endpoint for healthcheck
+- Detects when the worker crashes or is killed
+- Suitable for background worker services
+
+**Configuration in docker-compose.yml:**
+
+```yaml
+healthcheck:
+  test: ["CMD-SHELL", "pgrep -f node || exit 1"]
+  interval: 30s
+  timeout: 10s
+  retries: 3
+  start_period: 40s
+```
+
+</details>
+
+<details>
+<summary>How does the health service check worker status?</summary>
+
+The health service in `apps/api/src/modules/health/health.service.ts` checks worker status using BullMQ's built-in worker detection mechanism.
+
+**Implementation:**
+
+```typescript
+try {
+  const workers = await this.imageQueue.getWorkers();
+  workerStatus = workers.length > 0 ? "healthy" : "unhealthy";
+} catch (error) {
+  console.error("Worker health check error:", error);
+  workerStatus = "unhealthy";
+}
+```
+
+**How it works:**
+
+1. **`this.imageQueue.getWorkers()`**
+   - BullMQ method that retrieves the list of active workers for the 'image' queue
+   - Queries Redis to find worker metadata
+   - Workers register themselves with Redis when they start
+   - Workers send heartbeats to maintain their registration
+
+2. **Workers array**
+   - Returns an array of worker objects, e.g.:
+     ```typescript
+     [
+       { id: 'worker:1', ... },
+       { id: 'worker:2', ... }
+     ]
+     ```
+
+3. **Logic check** - `workers.length > 0`
+   - If there is at least one active worker → status is 'healthy'
+   - If no workers are active → status is 'unhealthy'
+
+4. **Error handling**
+   - If Redis is disconnected or queue error occurs → status is 'unhealthy'
+
+**Why this approach is effective:**
+
+- Uses BullMQ's built-in mechanism (no custom endpoint needed)
+- Real-time detection of worker availability
+- Workers automatically unregister when they crash or stop
+- No HTTP call required from API to worker
+- Leverages existing Redis infrastructure
+
+**Response in health endpoint:**
+
+```json
+{
+  "status": "healthy",
+  "services": {
+    "api": "healthy",
+    "database": "healthy",
+    "redis": "healthy",
+    "queue": "healthy",
+    "worker": "healthy",
+    "auth": "healthy"
+  }
+}
+```
+
+</details>
+
 ## Testing
 
 <details>
