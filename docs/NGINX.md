@@ -16,31 +16,37 @@ Nginx (pronounced "engine-x") is a high-performance, open-source web server and 
 In SystemVibe, Nginx serves as a reverse proxy for the API service. Here's why it's beneficial:
 
 ### 1. **Single Entry Point**
+
 - All external traffic enters through Nginx on port 80
 - Simplifies client configuration (single URL)
 - Hides internal service architecture
 
 ### 2. **Security**
+
 - Acts as a security barrier between external clients and backend services
 - Can implement rate limiting, IP whitelisting, and other security measures
 - Hides backend service ports from direct access
 
 ### 3. **Load Balancing (Future)**
+
 - Can distribute traffic across multiple API instances
 - Supports various load balancing algorithms (round-robin, least connections, etc.)
 - Enables horizontal scaling
 
 ### 4. **SSL/TLS Termination (Future)**
+
 - Can handle HTTPS encryption/decryption
 - Reduces load on backend services
 - Centralized certificate management
 
 ### 5. **Caching (Future)**
+
 - Can cache API responses to reduce backend load
 - Improves response times for frequently accessed data
 - Reduces database queries
 
 ### 6. **Request Routing**
+
 - Routes requests based on URL patterns
 - Can serve static files directly
 - Proxies API requests to backend services
@@ -86,8 +92,8 @@ http {
 ### Configuration Breakdown
 
 - **`upstream api`**: Defines the backend API server
-  - `host.docker.internal:3000`: Points to the host machine where API runs with `npm run dev`
-  - In production, this would point to container names or load-balanced endpoints
+  - `host.docker.internal:3000`: Points to the host machine where API runs with `npm run dev` (development setup)
+  - In production, this would point to container names (e.g., `api:3000`) or load-balanced endpoints
 
 - **`location /api/`**: Handles all API requests
   - `proxy_pass http://api/api/`: Forwards requests to the backend API
@@ -103,12 +109,14 @@ http {
 ## Development vs Production Setup
 
 ### Development Environment
+
 - API runs locally with `npm run dev` on port 3000
 - Nginx proxies to `host.docker.internal:3000` (Docker Desktop special DNS name)
 - Enables hot-reload and debugging
 - Nginx runs in Docker container for consistency
 
 ### Production Environment
+
 - API runs in Docker containers
 - Nginx proxies to container names (e.g., `api:3000`)
 - Multiple API instances can be load-balanced
@@ -118,11 +126,13 @@ http {
 ## Applications in SystemVibe
 
 ### Current Use Cases
+
 1. **API Gateway**: Single entry point for all API requests
 2. **Request Routing**: Routes `/api/*` requests to the backend API
 3. **Header Management**: Adds forwarding headers for proper client identification
 
 ### Future Use Cases
+
 1. **Load Balancing**: Distribute traffic across multiple API instances
 2. **SSL/TLS Termination**: Handle HTTPS encryption
 3. **Rate Limiting**: Protect against abuse and DDoS attacks
@@ -135,21 +145,25 @@ http {
 ## Testing Nginx
 
 ### Check Nginx Status
+
 ```bash
 docker compose ps nginx
 ```
 
 ### Restart Nginx
+
 ```bash
 docker compose restart nginx
 ```
 
 ### Test Health Check through Nginx
+
 ```bash
 curl http://localhost/api/health
 ```
 
 Expected response:
+
 ```json
 {
   "status": "healthy",
@@ -166,11 +180,13 @@ Expected response:
 ```
 
 ### View Nginx Logs
+
 ```bash
 docker compose logs nginx
 ```
 
 ### Reload Nginx Configuration (without restart)
+
 ```bash
 docker compose exec nginx nginx -s reload
 ```

@@ -230,7 +230,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
       }),
     }),
     BullModule.registerQueue({
-      name: 'jobs',
+      name: 'image',
     }),
   ],
   exports: [BullModule],
@@ -756,10 +756,10 @@ async function bootstrap() {
   const serverAdapter = new ExpressAdapter();
   serverAdapter.setBasePath('/admin/queues');
 
-  const jobsQueue = app.get(getQueueToken('jobs'));
+  const imageQueue = app.get(getQueueToken('image'));
 
   createBullBoard({
-    queues: [new BullMQAdapter(jobsQueue, { readOnlyMode: false })],
+    queues: [new BullMQAdapter(imageQueue, { readOnlyMode: false })],
     serverAdapter,
   });
 

@@ -489,7 +489,7 @@ events {
 
 http {
   upstream api {
-    server api:3000;
+    server host.docker.internal:3000;
   }
 
   server {

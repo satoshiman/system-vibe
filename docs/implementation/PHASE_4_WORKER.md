@@ -836,9 +836,9 @@ curl http://localhost:3000/api/jobs/<job-id>
 
 ## Scaling Workers
 
-**Important**: To enable scaling, the `worker-image` service must NOT have a `container_name` field in docker-compose.yml. Docker requires each container to have a unique name when scaling.
+**Important**: The current `docker-compose.yml` includes `container_name: systemvibe-worker-image` for the worker service. To enable horizontal scaling with `docker compose up --scale`, you must remove this field from the docker-compose.yml file. Docker requires each container to have a unique name when scaling.
 
-To scale workers horizontally, use the command line:
+To scale workers horizontally after removing `container_name`:
 
 ```bash
 # Scale to 5 worker instances
