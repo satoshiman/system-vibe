@@ -342,13 +342,13 @@ redis:
 ## Docker & Workers
 
 <details>
-<summary>What does the Dockerfile in packages/worker-image do?</summary>
+<summary>What does the Dockerfile in apps/worker-image do?</summary>
 
-The Dockerfile in `packages/worker-image` is used to build and run the **image processing worker**. It performs the following steps:
+The Dockerfile in `apps/worker-image` is used to build and run the **image processing worker**. It performs the following steps:
 
 1. **Base image**: Uses `node:20-alpine` (lightweight, optimized for production)
 2. **Install Sharp dependencies**: Installs `vips-dev`, `build-base`, `pkgconfig` - these are required by Sharp for image processing
-3. **Copy source**: Copies `package.json`, `tsconfig.json`, and source code from `packages/worker-image/src`
+3. **Copy source**: Copies `package.json`, `tsconfig.json`, and source code from `apps/worker-image/src`
 4. **Install & Build**: Installs dependencies and compiles TypeScript to JavaScript
 5. **Environment**: Sets `NODE_ENV=production` and `LOG_LEVEL=info`
 6. **Run**: Starts the worker with `node dist/main.js`

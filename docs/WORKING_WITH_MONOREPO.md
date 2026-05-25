@@ -131,10 +131,14 @@ npm Workspaces is a built-in feature (npm 7+) that manages monorepo dependencies
 systemvibe/
 ├── package.json              # Root (workspaces config)
 ├── apps/
-│   └── api/                  # NestJS API server
-│       ├── package.json      # API dependencies
+│   ├── api/                  # NestJS API server
+│   │   ├── package.json      # API dependencies
+│   │   ├── src/
+│   │   └── dist/
+│   └── worker-image/         # Image processing worker
+│       ├── package.json
 │       ├── src/
-│       └── dist/
+│       └── Dockerfile
 ├── packages/
 │   ├── database/             # Prisma ORM
 │   │   ├── package.json
@@ -143,10 +147,6 @@ systemvibe/
 │   ├── redis/                # Redis utilities
 │   │   ├── package.json
 │   │   └── src/
-│   ├── worker-image/         # Image processing worker
-│   │   ├── package.json
-│   │   ├── src/
-│   │   └── Dockerfile
 │   └── shared/               # Shared types/utils
 │       ├── package.json
 │       └── src/

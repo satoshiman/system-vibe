@@ -1758,10 +1758,8 @@ systemvibe/
 │   └── database/                     # Prisma schema & migrations
 │
 ├── docker/                           # Docker configuration
-│   ├── api.Dockerfile
-│   ├── worker-image.Dockerfile
-│   ├── worker-video.Dockerfile
-│   └── docker-compose.yml
+│   ├── docker-compose.yml
+│   └── nginx.conf
 │
 ├── infra/                            # Infrastructure as Code
 │   ├── prometheus/

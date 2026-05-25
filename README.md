@@ -84,21 +84,29 @@ docker compose down
 ```
 system-vibe/
 ├── apps/
-│   └── api/                 # NestJS API application
+│   ├── api/                 # NestJS API application
+│   │   ├── src/
+│   │   │   ├── modules/     # Feature modules
+│   │   │   │   ├── health/  # Health check module
+│   │   │   │   ├── auth/    # Authentication module
+│   │   │   │   ├── jobs/    # Job queue module
+│   │   │   │   └── queue/   # BullMQ configuration
+│   │   │   ├── common/      # Common utilities
+│   │   │   ├── config/      # Configuration
+│   │   │   ├── guards/      # Auth guards
+│   │   │   ├── interceptors/ # Interceptors
+│   │   │   └── filters/     # Exception filters
+│   │   ├── Dockerfile
+│   │   ├── package.json
+│   │   └── tsconfig.json
+│   └── worker-image/        # Image processing worker
 │       ├── src/
-│       │   ├── modules/     # Feature modules
-│       │   │   ├── health/  # Health check module
-│       │   │   ├── auth/    # Authentication module
-│       │   │   ├── jobs/    # Job queue module
-│       │   │   └── queue/   # BullMQ configuration
-│       │   ├── common/      # Common utilities
-│       │   ├── config/      # Configuration
-│       │   ├── guards/      # Auth guards
-│       │   ├── interceptors/ # Interceptors
-│       │   └── filters/     # Exception filters
+│       │   ├── main.ts
+│       │   ├── worker.module.ts
+│       │   ├── image.processor.ts
+│       │   └── redis-config.service.ts
 │       ├── Dockerfile
-│       ├── package.json
-│       └── tsconfig.json
+│       └── package.json
 ├── packages/
 │   ├── config/              # Centralized environment configuration
 │   │   ├── src/
@@ -115,14 +123,6 @@ system-vibe/
 │   ├── redis/               # Redis utilities
 │   │   ├── src/
 │   │   │   └── index.ts
-│   │   └── package.json
-│   ├── worker-image/        # Image processing worker
-│   │   ├── src/
-│   │   │   ├── main.ts
-│   │   │   ├── worker.module.ts
-│   │   │   ├── image.processor.ts
-│   │   │   └── redis-config.service.ts
-│   │   ├── Dockerfile
 │   │   └── package.json
 │   └── shared/              # Shared utilities
 ├── infra/

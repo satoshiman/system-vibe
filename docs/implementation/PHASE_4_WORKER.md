@@ -30,11 +30,11 @@ After Phase 4, you'll have:
 ## Step 1: Create Worker Package Structure
 
 ```bash
-# Create worker-image package
-mkdir -p packages/worker-image/src
+# Create worker-image app
+mkdir -p apps/worker-image/src
 
 # Create package.json
-cat > packages/worker-image/package.json << 'EOF'
+cat > apps/worker-image/package.json << 'EOF'
 {
   "name": "@systemvibe/worker-image",
   "version": "0.1.0",
@@ -68,7 +68,7 @@ cat > packages/worker-image/package.json << 'EOF'
 EOF
 
 # Create TypeScript configuration
-cat > packages/worker-image/tsconfig.json << 'EOF'
+cat > apps/worker-image/tsconfig.json << 'EOF'
 {
   "compilerOptions": {
     "module": "commonjs",
@@ -108,7 +108,7 @@ EOF
 
 ```bash
 # Create Redis config service
-cat > packages/worker-image/src/redis-config.service.ts << 'EOF'
+cat > apps/worker-image/src/redis-config.service.ts << 'EOF'
 import { Injectable } from "@nestjs/common";
 import { SharedBullConfigurationFactory } from "@nestjs/bullmq";
 import { env } from "@systemvibe/config";
@@ -134,7 +134,7 @@ EOF
 
 ```bash
 # Create image processor
-cat > packages/worker-image/src/image.processor.ts << 'EOF'
+cat > apps/worker-image/src/image.processor.ts << 'EOF'
 import { Processor, WorkerHost, OnWorkerEvent } from "@nestjs/bullmq";
 import { Job } from "bullmq";
 import sharp from "sharp";
@@ -357,7 +357,7 @@ EOF
 
 ```bash
 # Create worker module
-cat > packages/worker-image/src/worker.module.ts << 'EOF'
+cat > apps/worker-image/src/worker.module.ts << 'EOF'
 import { Module } from "@nestjs/common";
 import { BullModule } from "@nestjs/bullmq";
 import { ImageProcessor } from "./image.processor";
@@ -385,7 +385,7 @@ EOF
 
 ```bash
 # Create main.ts
-cat > packages/worker-image/src/main.ts << 'EOF'
+cat > apps/worker-image/src/main.ts << 'EOF'
 import { NestFactory } from "@nestjs/core";
 import { WorkerModule } from "./worker.module";
 import pino from "pino";
@@ -444,7 +444,7 @@ EOF
 
 ```bash
 # Create Dockerfile
-cat > packages/worker-image/Dockerfile << 'EOF'
+cat > apps/worker-image/Dockerfile << 'EOF'
 FROM node:20-alpine
 
 # Install minimal build dependencies for Sharp
@@ -455,10 +455,10 @@ RUN apk add --no-cache \
 
 WORKDIR /app
 
-# Copy package.json and source code from packages/worker-image
-COPY packages/worker-image/package.json ./
-COPY packages/worker-image/tsconfig.json ./
-COPY packages/worker-image/src ./src
+# Copy package.json and source code from apps/worker-image
+COPY apps/worker-image/package.json ./
+COPY apps/worker-image/tsconfig.json ./
+COPY apps/worker-image/src ./src
 
 # Install all dependencies (needed for TypeScript build)
 RUN npm install
@@ -575,7 +575,7 @@ services:
   worker-image:
     build:
       context: ../../
-      dockerfile: packages/worker-image/Dockerfile
+      dockerfile: apps/worker-image/Dockerfile
     container_name: systemvibe-worker-image
     env_file:
       - ../../.env
@@ -634,8 +634,8 @@ EOF
 ## Step 9: Build and Start Worker
 
 ```bash
-# Build the worker package
-npm run build --workspace=packages/worker-image
+# Build the worker app
+npm run build --workspace=apps/worker-image
 
 # Start all services with Docker Compose
 cd infra/docker
@@ -844,7 +844,7 @@ To scale workers horizontally, modify docker-compose.yml:
 worker-image:
   build:
     context: ../../
-    dockerfile: packages/worker-image/Dockerfile
+    dockerfile: apps/worker-image/Dockerfile
   env_file:
     - ../../.env
   environment:
@@ -856,7 +856,7 @@ worker-image:
   networks:
     - systemvibe
   deploy:
-    replicas: 3  # Run 3 instances
+    replicas: 3 # Run 3 instances
 ```
 
 Or use command line:
@@ -1013,7 +1013,7 @@ You're ready for **Phase 5: Advanced Features**:
 
 ```bash
 # Build worker
-npm run build --workspace=packages/worker-image
+npm run build --workspace=apps/worker-image
 
 # Start all services
 cd infra/docker && docker compose up -d

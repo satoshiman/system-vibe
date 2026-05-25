@@ -83,7 +83,7 @@ services:
   worker-image:
     build:
       context: ../../
-      dockerfile: packages/worker-image/Dockerfile
+      dockerfile: apps/worker-image/Dockerfile
     container_name: systemvibe-worker-image
     env_file:
       - ../../.env
