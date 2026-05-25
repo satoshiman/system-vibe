@@ -422,14 +422,14 @@ Run the API locally with hot reload, while PostgreSQL and Redis run in Docker.
 **Setup:**
 
 ```bash
-# Terminal 1: Start database and Redis
+# Terminal 1: Start database, Redis, and worker
 cd infra/docker
-docker compose up -d postgres redis
+docker compose up -d postgres redis worker-image
 
 # Terminal 2: Run API locally
 cd apps/api
 npm install
-npm run start:dev
+npm run dev
 ```
 
 **Advantages:**
@@ -459,7 +459,7 @@ docker compose up -d --build
 **How it works:**
 
 - Source code is mounted into the container as read-only volumes
-- `npm run start:dev` runs inside the container with hot reload
+- `npm run dev` runs inside the container with hot reload
 - Edit code locally, container auto-reloads
 
 **Monitor logs:**
@@ -488,12 +488,12 @@ docker compose logs -f api
 cd infra/docker
 docker compose down
 
-# Start only DB/Redis
-docker compose up -d postgres redis
+# Start only DB/Redis/Worker
+docker compose up -d postgres redis worker-image
 
 # Run API locally
 cd apps/api
-npm run start:dev
+npm run dev
 ```
 
 **From Local to Docker Dev:**
@@ -521,7 +521,7 @@ volumes:
 **Change command:**
 
 ```yaml
-command: npm start # Was: npm run start:dev
+command: npm start # Was: npm run dev
 ```
 
 Then rebuild:
@@ -547,7 +547,7 @@ volumes:
 **Change command:**
 
 ```yaml
-command: npm run start:dev # Was: npm start
+command: npm run dev # Was: npm start
 ```
 
 Then rebuild:
@@ -596,11 +596,11 @@ cd apps/api
 npm run test:e2e
 ```
 
-**Note:** E2E tests require PostgreSQL and Redis to be running. Start them with:
+**Note:** E2E tests require PostgreSQL, Redis, and worker to be running. Start them with:
 
 ```bash
 cd infra/docker
-docker compose up -d postgres redis
+docker compose up -d postgres redis worker-image
 ```
 
 ## API Endpoints

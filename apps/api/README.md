@@ -79,7 +79,7 @@ http://localhost:3000/admin/queues
 
 ### Available Scripts
 
-- `npm run start:dev` - Start in development mode with hot reload
+- `npm run dev` - Start in development mode with hot reload
 - `npm run build` - Build the project
 - `npm start` - Start the production build
 - `npm test` - Run unit tests

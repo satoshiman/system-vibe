@@ -566,7 +566,7 @@ services:
       - ../../apps/api/src:/app/src:ro
       - ../../apps/api/package.json:/app/package.json:ro
       - ../../apps/api/tsconfig.json:/app/tsconfig.json:ro
-    command: npm run start:dev
+    command: npm run dev
     networks:
       - systemvibe
 
