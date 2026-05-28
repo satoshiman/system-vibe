@@ -1,12 +1,32 @@
-import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
 import { Client } from 'pg';
 import Redis from 'ioredis';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { env } from '@systemvibe/config';
+import { getRedisClient } from '@systemvibe/redis';
+
+interface QueueStatus {
+  name: string;
+  waiting: number;
+  active: number;
+  completed: number;
+  failed: number;
+  delayed: number;
+}
+
+interface WorkerStatus {
+  id: string;
+  type: string;
+  status: string;
+  lastHeartbeat: string;
+  jobsProcessed: number;
+  uptime: number;
+}
 
 @Injectable()
 export class HealthService implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(HealthService.name);
   private dbClient!: Client;
   private redisClient!: Redis;
   private dbConnected = false;
@@ -40,6 +60,8 @@ export class HealthService implements OnModuleInit, OnModuleDestroy {
     let queueStatus = 'unknown';
     let workerStatus = 'unknown';
     const authStatus = 'healthy';
+    const queues: QueueStatus[] = [];
+    const workers: WorkerStatus[] = [];
 
     try {
       if (this.dbConnected) {
@@ -49,7 +71,7 @@ export class HealthService implements OnModuleInit, OnModuleDestroy {
         dbStatus = 'unhealthy';
       }
     } catch (error) {
-      console.error('Database health check error:', error);
+      this.logger.error('Database health check error:', error);
       dbStatus = 'unhealthy';
     }
 
@@ -57,31 +79,54 @@ export class HealthService implements OnModuleInit, OnModuleDestroy {
       const result = await this.redisClient.ping();
       redisStatus = result === 'PONG' ? 'healthy' : 'unhealthy';
     } catch (error) {
-      console.error('Redis health check error:', error);
+      this.logger.error('Redis health check error:', error);
       redisStatus = 'unhealthy';
     }
 
     try {
-      await this.imageQueue.getJobCounts();
+      const counts = await this.imageQueue.getJobCounts();
       queueStatus = 'healthy';
+      queues.push({
+        name: 'image',
+        waiting: counts.waiting || 0,
+        active: counts.active || 0,
+        completed: counts.completed || 0,
+        failed: counts.failed || 0,
+        delayed: counts.delayed || 0,
+      });
     } catch (error) {
-      console.error('Queue health check error:', error);
+      this.logger.error('Queue health check error:', error);
       queueStatus = 'unhealthy';
     }
 
     try {
-      const workers = await this.imageQueue.getWorkers();
-      workerStatus = workers.length > 0 ? 'healthy' : 'unhealthy';
+      // Get worker status from Redis heartbeat keys
+      const redis = getRedisClient();
+      const workerKeys = await redis.keys('worker:heartbeat:*');
+
+      for (const key of workerKeys) {
+        const workerData = await redis.get(key);
+        if (workerData) {
+          const worker = JSON.parse(workerData);
+          workers.push({
+            id: worker.id || worker.workerId,
+            type: worker.type || 'unknown',
+            status: worker.status || 'unknown',
+            lastHeartbeat: worker.timestamp,
+            jobsProcessed: worker.jobsProcessed || 0,
+            uptime: worker.uptime || 0,
+          });
+        }
+      }
+
+      workerStatus = workers.length > 0 ? 'healthy' : 'degraded';
     } catch (error) {
-      console.error('Worker health check error:', error);
+      this.logger.error('Worker health check error:', error);
       workerStatus = 'unhealthy';
     }
 
     const overallStatus =
-      dbStatus === 'healthy' &&
-      redisStatus === 'healthy' &&
-      queueStatus === 'healthy' &&
-      workerStatus === 'healthy'
+      dbStatus === 'healthy' && redisStatus === 'healthy' && queueStatus === 'healthy'
         ? 'healthy'
         : 'degraded';
 
@@ -96,7 +141,22 @@ export class HealthService implements OnModuleInit, OnModuleDestroy {
         worker: workerStatus,
         auth: authStatus,
       },
-      version: '0.3.0',
+      details: {
+        queues,
+        workers,
+        metrics: {
+          endpoint: '/api/metrics',
+          format: 'prometheus',
+        },
+        grafana: {
+          url: 'http://localhost:3001',
+          dashboard: 'SystemVibe Dashboard',
+        },
+        prometheus: {
+          url: 'http://localhost:9090',
+        },
+      },
+      version: '0.6.0',
     };
   }
 }
