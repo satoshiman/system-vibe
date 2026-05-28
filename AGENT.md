@@ -1111,7 +1111,7 @@ Result: { compressedUrl: string, originalSize: number, newSize: number }
 - [x] Worker Docker image that connects to Redis queue
 - [x] Image processing using Sharp library
 - [x] Proper error handling and logging
-- [x] `docker-compose up --scale worker-image=3` works
+- [x] `docker compose up --scale worker-image=3` works
 - [x] Worker heartbeat mechanism for health monitoring
 - [x] Graceful shutdown handling
 - [x] Job event logging (active, completed, failed)
@@ -2776,23 +2776,25 @@ logger.error(
 - [x] Job status broadcasts
 - [x] Progress updates
 
-### Phase 6 (Week 4): Monitoring ✅
+### Phase 6 (Week 4): Monitoring ⏳ PENDING
 
-- [x] Prometheus metrics
-- [x] Grafana dashboards
-- [x] Health checks
-- [x] Structured logging
+- [ ] Prometheus metrics
+- [ ] Grafana dashboards
+- [ ] Structured logging with correlation IDs
+- [ ] /metrics endpoint for Prometheus scraping
 
-### Phase 7 (Week 4): Webhooks ✅
+### Phase 7 (Week 4): Webhooks ⏳ PENDING
 
-- [x] Webhook delivery
-- [x] Retry logic
-- [x] HMAC signatures
+- [ ] Webhook URL in job payload
+- [ ] Webhook delivery on job completion
+- [ ] Retry logic for failed webhooks
+- [ ] HMAC signature verification
 
-### Phase 8 (Week 4): Rate Limiting ✅
+### Phase 8 (Week 4): Rate Limiting ⏳ PENDING
 
-- [x] User-based limiting
-- [x] IP-based limiting
+- [ ] User-based rate limiting (e.g., 100 jobs/hour)
+- [ ] IP-based rate limiting
+- [ ] Different limits for different job types
 
 ---
 

@@ -521,7 +521,7 @@ Create a simple HTML file to test:
 
 **Solutions**:
 
-- Verify Redis is running: `docker-compose ps redis`
+- Verify Redis is running: `docker compose ps redis`
 - Check Redis connection string in config
 - Ensure Redis is accessible from API container
 

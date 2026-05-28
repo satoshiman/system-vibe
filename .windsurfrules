@@ -1,0 +1,121 @@
+# SystemVibe AI Agent Rules
+
+## Project Context
+- **Type**: Node.js monorepo with TypeScript
+- **Apps**: API service (`apps/api/`), Image worker (`apps/worker-image/`)
+- **Packages**: Config, Database (Prisma), Redis, Shared
+- **Infra**: Docker Compose, Nginx, Prometheus, Grafana
+
+## Code Conventions
+
+### TypeScript
+- Use strict TypeScript (`strict: true` in tsconfig)
+- Prefer `interface` over `type` for object shapes
+- Use explicit return types for public functions
+- No `any` - use `unknown` with type guards instead
+- Use `readonly` for immutable arrays/objects
+
+### Naming
+- Files: `kebab-case.ts` (e.g., `user-service.ts`)
+- Classes: `PascalCase` (e.g., `UserService`)
+- Functions/Variables: `camelCase` (e.g., `getUserById`)
+- Constants: `UPPER_SNAKE_CASE` for true constants
+- Database models: `PascalCase` (Prisma convention)
+
+### Imports
+- Group: External libs → Internal packages → Relative imports
+- Sort alphabetically within groups
+- Use explicit imports, avoid barrel files (index.ts) for deep imports
+
+## Architecture Rules
+
+### Frontend
+- Use Next.js stable latest version for frontend applications
+- Follow Next.js app router conventions
+- Use server components by default, client components only when needed
+
+### API (`apps/api/`)
+- Follow layered architecture: Routes → Controllers → Services → Repositories
+- Controllers handle HTTP concerns only (req/res, status codes)
+- Services contain business logic
+- Repositories handle data access (Prisma)
+- Use dependency injection pattern
+- Validate inputs with Zod or class-validator
+
+### Database (`packages/database/`)
+- All schema changes require migration
+- Migration naming: `YYYYMMDD_HHMMSS_description` format
+- Never modify existing migrations after commit
+- Use Prisma transactions for multi-table operations
+
+### Worker (`apps/worker-image/`)
+- Jobs should be idempotent
+- Implement proper error handling and retry logic
+- Log job progress for debugging
+
+## Making Changes
+
+### Before Coding
+1. Read related existing code to understand patterns
+2. Check if similar functionality exists elsewhere
+3. Understand database schema if touching data layer
+
+### During Coding
+1. Follow existing patterns in the codebase
+2. Add type definitions before implementation
+3. Handle errors explicitly (no silent catches)
+4. Add logging for important operations
+
+### After Coding
+1. Run `npm run lint` and fix issues
+2. Run `npm run build` to verify compilation
+3. Test the change locally if possible
+4. Update relevant documentation
+
+## Testing
+- Unit tests for services and utilities
+- Integration tests for API endpoints
+- Use Jest (configured in packages)
+- Mock external dependencies (Redis, external APIs)
+
+## Documentation
+- Update docs in `/docs/` if changing architecture
+- Add JSDoc for complex functions
+- Update README if adding new environment variables
+- Document API changes in OpenAPI/Postman collection
+- Use English for all documentation and comments
+
+## Git
+- Commit message format: `type(scope): description`
+- Types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`
+- Scope examples: `api`, `worker`, `db`, `shared`
+- Keep commits focused and atomic
+
+## Docker
+- Don't modify `docker-compose.yml` structure without discussion
+- Use `.env` files for local development
+- Ensure Dockerfile changes maintain multi-stage build optimization
+
+## Development Workflow
+- For `apps/api/`: Use `npm run dev` for local development (hot reload, faster iteration)
+- For other services (DB, Redis, worker): Use `docker compose` as defined in `infra/docker/docker-compose.yml`
+- API connects to Docker services via `host.docker.internal` or service names
+
+## Security
+- Never commit secrets or `.env` files
+- Validate all user inputs
+- Use parameterized queries (Prisma handles this)
+- Sanitize data before logging
+- Check for SQL injection, XSS vulnerabilities
+
+## Error Handling
+- Use custom error classes for domain errors
+- Always log errors with context
+- Return appropriate HTTP status codes (4xx client, 5xx server)
+- Don't expose internal error details to clients
+
+## Performance
+- Use Redis for caching expensive operations
+- Implement pagination for list endpoints
+- Avoid N+1 queries (use Prisma include/select wisely)
+- Consider job queue for long-running operations

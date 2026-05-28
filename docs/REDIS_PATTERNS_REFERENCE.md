@@ -571,25 +571,25 @@ CLIENT ID
 
 ```bash
 # Start Redis in development
-docker-compose -f infra/docker/docker-compose.yml up -d redis
+docker compose -f infra/docker/docker-compose.yml up -d redis
 
 # Start all services (Redis + API + PostgreSQL)
-docker-compose -f infra/docker/docker-compose.yml up -d
+docker compose -f infra/docker/docker-compose.yml up -d
 
 # Stop Redis
-docker-compose -f infra/docker/docker-compose.yml stop redis
+docker compose -f infra/docker/docker-compose.yml stop redis
 
 # Stop all services
-docker-compose -f infra/docker/docker-compose.yml down
+docker compose -f infra/docker/docker-compose.yml down
 
 # View Redis logs
-docker-compose -f infra/docker/docker-compose.yml logs -f redis
+docker compose -f infra/docker/docker-compose.yml logs -f redis
 
 # Restart Redis
-docker-compose -f infra/docker/docker-compose.yml restart redis
+docker compose -f infra/docker/docker-compose.yml restart redis
 
 # Remove Redis volumes (clears all data)
-docker-compose -f infra/docker/docker-compose.yml down -v
+docker compose -f infra/docker/docker-compose.yml down -v
 ```
 
 ### Redis CLI Connection

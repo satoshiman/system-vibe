@@ -808,7 +808,7 @@ There are three ways to scale the `worker-image` to multiple containers:
 **1. Docker Compose Scale (Simplest)**
 
 ```bash
-docker-compose up -d --scale worker-image=3
+docker compose up -d --scale worker-image=3
 ```
 
 This scales to 3 worker-image containers. Note: You must remove the `container_name` from docker-compose.yml because scaling doesn't allow multiple containers with the same name.
