@@ -56,6 +56,9 @@ interface ImageCompressJob {
 @Injectable()
 export class ImageProcessor extends WorkerHost {
   private heartbeatInterval: NodeJS.Timeout;
+  private jobStartTimes = new Map<string, number>();
+  private jobsProcessed = 0;
+  private jobsFailed = 0;
 
   constructor(private prisma: PrismaService) {
     super();
@@ -66,6 +69,9 @@ export class ImageProcessor extends WorkerHost {
   @OnWorkerEvent("active")
   async onActive(job: Job) {
     logger.info(`Job started processing`, { jobId: job.id, name: job.name });
+
+    // Track start time for metrics
+    this.jobStartTimes.set(job.id!, Date.now());
 
     // Update job status in database
     try {
@@ -95,7 +101,19 @@ export class ImageProcessor extends WorkerHost {
 
   @OnWorkerEvent("completed")
   async onCompleted(job: Job, result: any) {
-    logger.info(`Job completed`, { jobId: job.id, name: job.name, result });
+    const startTime = this.jobStartTimes.get(job.id!);
+    const durationMs = startTime ? Date.now() - startTime : 0;
+    const durationSeconds = durationMs / 1000;
+
+    this.jobsProcessed++;
+    this.jobStartTimes.delete(job.id!);
+
+    logger.info(`Job completed`, {
+      jobId: job.id,
+      name: job.name,
+      durationMs,
+      result,
+    });
 
     // Update job status in database
     try {
@@ -123,13 +141,37 @@ export class ImageProcessor extends WorkerHost {
         result,
       }),
     );
+
+    // Publish job metrics for Prometheus
+    await redis.publish(
+      "job:metrics",
+      JSON.stringify({
+        event: "job_completed",
+        jobId: job.id,
+        type: job.name,
+        priority: job.data?.priority || "normal",
+        durationSeconds,
+        timestamp: new Date().toISOString(),
+        workerId: WORKER_ID,
+      }),
+    );
   }
 
   @OnWorkerEvent("failed")
   async onFailed(job: Job, error: Error) {
+    const startTime = job?.id ? this.jobStartTimes.get(job.id) : null;
+    const durationMs = startTime ? Date.now() - startTime : 0;
+    const durationSeconds = durationMs / 1000;
+
+    this.jobsFailed++;
+    if (job?.id) {
+      this.jobStartTimes.delete(job.id);
+    }
+
     logger.error(`Job failed`, {
       jobId: job?.id,
       name: job?.name,
+      durationMs,
       error: error.message,
     });
 
@@ -160,6 +202,21 @@ export class ImageProcessor extends WorkerHost {
           error: error.message,
         }),
       );
+
+      // Publish job metrics for Prometheus
+      await redis.publish(
+        "job:metrics",
+        JSON.stringify({
+          event: "job_failed",
+          jobId: job.id,
+          type: job.name,
+          priority: job.data?.priority || "normal",
+          durationSeconds,
+          error: error.message,
+          timestamp: new Date().toISOString(),
+          workerId: WORKER_ID,
+        }),
+      );
     }
   }
 
@@ -169,15 +226,23 @@ export class ImageProcessor extends WorkerHost {
         await redis.set(
           HEARTBEAT_KEY,
           JSON.stringify({
+            id: WORKER_ID,
             workerId: WORKER_ID,
             type: "image",
             timestamp: new Date().toISOString(),
             status: "active",
+            jobsProcessed: this.jobsProcessed,
+            jobsFailed: this.jobsFailed,
+            uptime: process.uptime(),
           }),
           "EX",
           HEARTBEAT_TTL,
         );
-        logger.debug("Heartbeat sent", { workerId: WORKER_ID });
+        logger.debug("Heartbeat sent", {
+          workerId: WORKER_ID,
+          jobsProcessed: this.jobsProcessed,
+          jobsFailed: this.jobsFailed,
+        });
       } catch (error) {
         logger.error("Failed to send heartbeat", { error: error.message });
       }
