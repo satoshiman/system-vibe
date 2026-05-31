@@ -13,7 +13,7 @@ export class JobsService {
     @InjectQueue('image') private imageQueue: Queue
   ) {}
 
-  async create(createJobDto: CreateJobDto): Promise<JobResponseDto> {
+  async create(createJobDto: CreateJobDto, correlationId?: string): Promise<JobResponseDto> {
     // Create job in database without userId (public job)
     const job = await this.prisma.job.create({
       data: {
@@ -27,13 +27,14 @@ export class JobsService {
       },
     });
 
-    // Add job to BullMQ queue
+    // Add job to BullMQ queue with correlation ID for distributed tracing
     await this.imageQueue.add(
       createJobDto.type,
       {
         jobId: job.id,
         type: createJobDto.type,
         payload: createJobDto.payload,
+        correlationId, // Pass correlation ID to worker
       },
       {
         jobId: job.id,

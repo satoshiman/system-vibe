@@ -287,7 +287,333 @@ scrape_configs:
     scrape_interval: 5s
 ```
 
-### Step 8: Update Worker to Report Metrics
+### Step 8: Setup Correlation IDs with pino-http
+
+Install dependency:
+
+```bash
+npm install --workspace=apps/api pino-http uuid
+npm install --save-dev --workspace=apps/api @types/uuid
+```
+
+Update `apps/api/src/main.ts` to configure correlation IDs:
+
+```typescript
+import { NestFactory } from "@nestjs/core";
+import { AppModule } from "./app.module";
+import pino from "pino";
+import pinoHttp from "pino-http";
+import { v4 as uuidv4 } from "uuid";
+import { env } from "@systemvibe/config";
+
+// Create root logger with base properties
+const logger = pino({
+  level: env.LOG_LEVEL || "info",
+  base: {
+    service: "systemvibe-api",
+    version: "0.1.0",
+  },
+});
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule, {
+    logger: false, // Disable default NestJS logger, use Pino instead
+  });
+
+  // Configure pino-http with correlation IDs
+  app.use(
+    pinoHttp({
+      logger,
+      genReqId: (req, res) => {
+        // Check for incoming correlation ID from headers
+        const existingId = req.headers["x-correlation-id"] as string;
+        if (existingId) {
+          return existingId;
+        }
+        // Generate new correlation ID
+        const id = uuidv4();
+        res.setHeader("X-Correlation-Id", id);
+        return id;
+      },
+      customProps: (req, res) => ({
+        correlationId: req.id,
+        userId: (req as any).user?.id,
+      }),
+      // Redact sensitive fields
+      redact: {
+        paths: ["req.headers.authorization", "req.headers.cookie"],
+        remove: true,
+      },
+    }),
+  );
+
+  // Enable CORS
+  app.enableCors({
+    origin: "*",
+    methods: "GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS",
+    credentials: true,
+  });
+
+  app.setGlobalPrefix("api");
+
+  // ... rest of bootstrap (Swagger, BullMQ Board, etc.) ...
+
+  const port = env.API_PORT;
+  await app.listen(port, "0.0.0.0");
+  logger.info(`API Server running on http://localhost:${port}`);
+}
+
+bootstrap().catch((err) => {
+  logger.error(err, "Failed to start API");
+  process.exit(1);
+});
+```
+
+### Step 9: Update Worker to Use Correlation IDs
+
+Update `apps/worker-image/src/image.processor.ts` to receive and log correlation IDs:
+
+```typescript
+import { Processor, WorkerHost, OnWorkerEvent } from "@nestjs/bullmq";
+import { Job } from "bullmq";
+import pino from "pino";
+import { env } from "@systemvibe/config";
+
+// Logger factory that includes correlation ID
+const createLogger = (correlationId?: string) => {
+  return pino({
+    level: env.LOG_LEVEL,
+    base: {
+      service: "worker-image",
+      correlationId: correlationId || "unknown",
+    },
+    transport: {
+      target: "pino-pretty",
+      options: {
+        colorize: true,
+      },
+    },
+  });
+};
+
+@Processor("image")
+export class ImageProcessor extends WorkerHost {
+  private jobLoggers = new Map<string, any>();
+
+  async process(job: Job): Promise<any> {
+    // Get correlation ID from job data (passed by API)
+    const correlationId = job.data.correlationId as string;
+
+    // Create job-specific logger with correlation ID
+    const logger = createLogger(correlationId);
+    this.jobLoggers.set(job.id!, logger);
+
+    logger.info("Job started processing", {
+      jobId: job.id,
+      type: job.name,
+      correlationId,
+    });
+
+    // ... processing logic ...
+  }
+
+  @OnWorkerEvent("completed")
+  async onCompleted(job: Job, result: any) {
+    const logger = this.jobLoggers.get(job.id!) || createLogger();
+
+    logger.info("Job completed", {
+      jobId: job.id,
+      result,
+      correlationId: job.data.correlationId,
+    });
+
+    // Publish to Redis with correlation ID
+    await redis.publish(
+      "job:metrics",
+      JSON.stringify({
+        jobId: job.id,
+        type: job.name,
+        status: "completed",
+        correlationId: job.data.correlationId,
+        duration: job.data.duration,
+      }),
+    );
+
+    this.jobLoggers.delete(job.id!);
+  }
+
+  @OnWorkerEvent("failed")
+  async onFailed(job: Job, error: Error) {
+    const logger = this.jobLoggers.get(job.id!) || createLogger();
+
+    logger.error("Job failed", {
+      jobId: job.id,
+      error: error.message,
+      correlationId: job.data.correlationId,
+    });
+
+    this.jobLoggers.delete(job.id!);
+  }
+}
+```
+
+### Step 10: Pass Correlation ID from API to Worker
+
+Update `apps/api/src/modules/jobs/jobs.service.ts` to include correlation ID in job data:
+
+```typescript
+import { Injectable } from "@nestjs/common";
+import { InjectQueue } from "@nestjs/bullmq";
+import { Queue } from "bullmq";
+import { PrismaService } from "@systemvibe/database";
+import { CreateJobDto } from "./dto/create-job.dto";
+
+@Injectable()
+export class JobsService {
+  constructor(
+    private prisma: PrismaService,
+    @InjectQueue("image") private imageQueue: Queue,
+  ) {}
+
+  async create(
+    createJobDto: CreateJobDto,
+    correlationId?: string,
+    userId?: string,
+  ): Promise<JobResponseDto> {
+    // Create job in database
+    const job = await this.prisma.job.create({
+      data: {
+        type: createJobDto.type,
+        payload: createJobDto.payload as any,
+        priority: createJobDto.priority || "normal",
+        status: "PENDING",
+        userId: userId || null,
+      },
+    });
+
+    // Add to queue with correlation ID for tracing
+    await this.imageQueue.add(
+      createJobDto.type,
+      {
+        jobId: job.id,
+        type: createJobDto.type,
+        payload: createJobDto.payload,
+        correlationId, // Pass correlation ID to worker
+        userId,
+      },
+      {
+        jobId: job.id,
+        priority: this.getPriorityValue(createJobDto.priority || "normal"),
+        attempts: 3,
+        backoff: {
+          type: "exponential",
+          delay: 2000,
+        },
+      },
+    );
+
+    // Update status
+    const updatedJob = await this.prisma.job.update({
+      where: { id: job.id },
+      data: { status: "QUEUED" },
+    });
+
+    return this.toJobResponseDto(updatedJob);
+  }
+}
+```
+
+### Step 11: Configure Log Persistence in Docker Compose
+
+Update `infra/docker/docker-compose.yml` to persist logs:
+
+```yaml
+services:
+  api:
+    build:
+      context: ../../apps/api
+      dockerfile: Dockerfile
+    container_name: systemvibe-api
+    environment:
+      - LOG_LEVEL=info
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+        labels: "service,environment"
+        env: "OS_VERSION"
+    volumes:
+      - api_logs:/app/logs
+    networks:
+      - systemvibe
+
+  worker-image:
+    build:
+      context: ../../apps/worker-image
+      dockerfile: Dockerfile
+    container_name: systemvibe-worker-image
+    environment:
+      - LOG_LEVEL=info
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    volumes:
+      - worker_logs:/app/logs
+    networks:
+      - systemvibe
+
+  # Optional: Loki for centralized log aggregation
+  loki:
+    image: grafana/loki:latest
+    container_name: systemvibe-loki
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./loki-config.yml:/etc/loki/local-config.yaml
+      - loki_data:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - systemvibe
+
+volumes:
+  api_logs:
+  worker_logs:
+  loki_data:
+```
+
+### Step 12: View Logs with Correlation IDs
+
+**View API logs:**
+
+```bash
+# Real-time logs with correlation IDs
+docker compose logs -f api
+
+# Logs with specific correlation ID
+docker compose logs api | grep "550e8400-e29b-41d4-a716-446655440000"
+
+# JSON logs (structured)
+docker inspect --format='{{.LogPath}}' systemvibe-api
+sudo cat $(docker inspect --format='{{.LogPath}}' systemvibe-api) | jq
+```
+
+**View Worker logs:**
+
+```bash
+docker compose logs -f worker-image
+```
+
+**Query logs with Loki (if enabled):**
+
+```bash
+# Query by correlation ID
+curl "http://localhost:3100/loki/api/v1/query?query={service=\"systemvibe-api\"} |= \"550e8400-e29b-41d4-a716-446655440000\""
+```
+
+### Step 13: Update Worker to Report Metrics
 
 Update `apps/worker-image/src/image.processor.ts` to track job metrics:
 
@@ -413,13 +739,72 @@ After completing Phase 6:
 3. **Log aggregation**: Add Loki for centralized logging
 4. **Distributed tracing**: Implement OpenTelemetry/Jaeger
 
+## Log Output Examples
+
+### Structured Log with Correlation ID
+
+**API Log:**
+
+```json
+{
+  "level": 30,
+  "time": 1717152345678,
+  "pid": 12345,
+  "hostname": "api-pod-1",
+  "service": "systemvibe-api",
+  "version": "0.1.0",
+  "correlationId": "550e8400-e29b-41d4-a716-446655440000",
+  "userId": "user-123",
+  "msg": "Job created",
+  "jobId": "job-456",
+  "type": "image-resize"
+}
+```
+
+**Worker Log (same correlation ID):**
+
+```json
+{
+  "level": 30,
+  "time": 1717152346000,
+  "pid": 67890,
+  "hostname": "worker-image-abc",
+  "service": "worker-image",
+  "correlationId": "550e8400-e29b-41d4-a716-446655440000",
+  "msg": "Job completed",
+  "jobId": "job-456",
+  "durationMs": 1234,
+  "result": { "outputUrl": "https://storage.example.com/result.jpg" }
+}
+```
+
+### Pretty Print Output (Development)
+
+```
+[08:30:45.123] INFO (12345): Job created
+    service: "systemvibe-api"
+    correlationId: "550e8400-e29b-41d4-a716-446655440000"
+    userId: "user-123"
+    jobId: "job-456"
+    type: "image-resize"
+
+[08:30:46.456] INFO (67890): Job completed
+    service: "worker-image"
+    correlationId: "550e8400-e29b-41d4-a716-446655440000"
+    jobId: "job-456"
+    durationMs: 1234
+```
+
 ## Summary
 
 Phase 6 adds production-grade observability with:
 
 - **Prometheus** for metrics collection
 - **Grafana** for visualization
-- **Structured logging** with correlation IDs
+- **Structured logging** with Pino
+- **Correlation IDs** for distributed tracing across API → Queue → Worker
+- **Log persistence** with Docker JSON file driver and log rotation
+- **Cross-service tracing** with same correlation ID in all logs
 - **Real-time monitoring** of queues and workers
 
-This provides visibility into system health and performance for production deployments.
+This provides complete visibility into system health, performance, and request tracing for production deployments.

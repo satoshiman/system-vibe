@@ -1,5 +1,5 @@
-import { Controller, Get, Post, Delete, Body, Param, Query } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
+import { Controller, Get, Post, Delete, Body, Param, Query, Headers } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiHeader } from '@nestjs/swagger';
 import { JobsService } from './jobs.service';
 import { CreateJobDto } from './dto/create-job.dto';
 import { JobResponseDto } from './dto/job-response.dto';
@@ -12,10 +12,18 @@ export class JobsController {
 
   @Post()
   @ApiOperation({ summary: 'Submit a new job' })
+  @ApiHeader({
+    name: 'x-correlation-id',
+    description: 'Optional correlation ID for distributed tracing',
+    required: false,
+  })
   @ApiResponse({ status: 201, description: 'Job created successfully', type: JobResponseDto })
   @ApiResponse({ status: 400, description: 'Bad request' })
-  async create(@Body() createJobDto: CreateJobDto): Promise<JobResponseDto> {
-    return this.jobsService.create(createJobDto);
+  async create(
+    @Body() createJobDto: CreateJobDto,
+    @Headers('x-correlation-id') correlationId?: string
+  ): Promise<JobResponseDto> {
+    return this.jobsService.create(createJobDto, correlationId);
   }
 
   @Get()

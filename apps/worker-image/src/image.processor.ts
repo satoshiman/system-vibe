@@ -52,11 +52,29 @@ interface ImageCompressJob {
   };
 }
 
+// Logger factory that includes correlation ID
+const createLogger = (correlationId?: string) => {
+  return pino({
+    level: env.LOG_LEVEL,
+    base: {
+      service: "worker-image",
+      correlationId: correlationId || "unknown",
+    },
+    transport: {
+      target: "pino-pretty",
+      options: {
+        colorize: true,
+      },
+    },
+  });
+};
+
 @Processor("image")
 @Injectable()
 export class ImageProcessor extends WorkerHost {
   private heartbeatInterval: NodeJS.Timeout;
   private jobStartTimes = new Map<string, number>();
+  private jobLoggers = new Map<string, ReturnType<typeof createLogger>>();
   private jobsProcessed = 0;
   private jobsFailed = 0;
 
@@ -68,7 +86,18 @@ export class ImageProcessor extends WorkerHost {
 
   @OnWorkerEvent("active")
   async onActive(job: Job) {
-    logger.info(`Job started processing`, { jobId: job.id, name: job.name });
+    // Get correlation ID from job data (passed by API)
+    const correlationId = job.data.correlationId as string;
+
+    // Create job-specific logger with correlation ID
+    const jobLogger = createLogger(correlationId);
+    this.jobLoggers.set(job.id!, jobLogger);
+
+    jobLogger.info("Job started processing", {
+      jobId: job.id,
+      name: job.name,
+      correlationId,
+    });
 
     // Track start time for metrics
     this.jobStartTimes.set(job.id!, Date.now());
@@ -108,10 +137,15 @@ export class ImageProcessor extends WorkerHost {
     this.jobsProcessed++;
     this.jobStartTimes.delete(job.id!);
 
-    logger.info(`Job completed`, {
+    // Get job-specific logger with correlation ID
+    const jobLogger = this.jobLoggers.get(job.id!) || createLogger();
+    const correlationId = job.data.correlationId as string;
+
+    jobLogger.info("Job completed", {
       jobId: job.id,
       name: job.name,
       durationMs,
+      correlationId,
       result,
     });
 
@@ -142,7 +176,7 @@ export class ImageProcessor extends WorkerHost {
       }),
     );
 
-    // Publish job metrics for Prometheus
+    // Publish job metrics for Prometheus with correlation ID
     await redis.publish(
       "job:metrics",
       JSON.stringify({
@@ -151,10 +185,13 @@ export class ImageProcessor extends WorkerHost {
         type: job.name,
         priority: job.data?.priority || "normal",
         durationSeconds,
+        correlationId: job.data?.correlationId,
         timestamp: new Date().toISOString(),
         workerId: WORKER_ID,
       }),
     );
+
+    this.jobLoggers.delete(job.id!);
   }
 
   @OnWorkerEvent("failed")
@@ -168,10 +205,16 @@ export class ImageProcessor extends WorkerHost {
       this.jobStartTimes.delete(job.id);
     }
 
-    logger.error(`Job failed`, {
+    // Get job-specific logger with correlation ID
+    const jobLogger =
+      (job?.id ? this.jobLoggers.get(job.id) : undefined) || createLogger();
+    const correlationId = job?.data?.correlationId as string;
+
+    jobLogger.error("Job failed", {
       jobId: job?.id,
       name: job?.name,
       durationMs,
+      correlationId,
       error: error.message,
     });
 
@@ -203,7 +246,7 @@ export class ImageProcessor extends WorkerHost {
         }),
       );
 
-      // Publish job metrics for Prometheus
+      // Publish job metrics for Prometheus with correlation ID
       await redis.publish(
         "job:metrics",
         JSON.stringify({
@@ -212,11 +255,14 @@ export class ImageProcessor extends WorkerHost {
           type: job.name,
           priority: job.data?.priority || "normal",
           durationSeconds,
+          correlationId: job.data?.correlationId,
           error: error.message,
           timestamp: new Date().toISOString(),
           workerId: WORKER_ID,
         }),
       );
+
+      this.jobLoggers.delete(job.id);
     }
   }
 

@@ -2,22 +2,59 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import pino from 'pino';
+import pinoHttp from 'pino-http';
+import { v4 as uuidv4 } from 'uuid';
 import { createBullBoard } from '@bull-board/api';
 import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
 import { ExpressAdapter } from '@bull-board/express';
 import { getQueueToken } from '@nestjs/bullmq';
 import { env } from '@systemvibe/config';
 
-const logger = pino();
+// Create root logger with base properties
+const logger = pino({
+  level: env.LOG_LEVEL || 'info',
+  base: {
+    service: 'systemvibe-api',
+    version: '0.1.0',
+  },
+});
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    logger: false, // Disable default NestJS logger, use Pino instead
+  });
+
+  // Configure pino-http with correlation IDs
+  app.use(
+    pinoHttp({
+      logger: logger as unknown as Parameters<typeof pinoHttp>[0] extends { logger: infer L }
+        ? L
+        : never,
+      genReqId: (req, res) => {
+        // Check for incoming correlation ID from headers
+        const existingId = req.headers['x-correlation-id'] as string;
+        if (existingId) {
+          return existingId;
+        }
+        // Generate new correlation ID
+        const id = uuidv4();
+        res.setHeader('X-Correlation-Id', id);
+        return id;
+      },
+      // Redact sensitive fields
+      redact: {
+        paths: ['req.headers.authorization', 'req.headers.cookie'],
+        remove: true,
+      },
+    })
+  );
 
   // Enable CORS
   app.enableCors({
     origin: '*', // Allow all origins for development
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
+    exposedHeaders: ['X-Correlation-Id'],
   });
 
   app.setGlobalPrefix('api');

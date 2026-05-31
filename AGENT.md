@@ -1077,18 +1077,18 @@ DELETE /jobs/{id}               # Cancel job (public, no auth)
 
 ---
 
-### 6.4 Phase 4: Single Worker Type (Week 3)
+### 6.4 Phase 4: Single Worker Type (Week 3) ✅ COMPLETED
 
 **Goal**: Build first worker to process jobs
 
 **Features**:
 
-- [ ] Image Worker service (separate Docker container)
-- [ ] Image processing jobs: resize, thumbnail, compress
-- [ ] Worker picks jobs from BullMQ queue
-- [ ] Worker updates job status
-- [ ] Error handling and failure logging
-- [ ] Worker health checks
+- [x] Image Worker service (separate Docker container)
+- [x] Image processing jobs: resize, thumbnail, compress
+- [x] Worker picks jobs from BullMQ queue
+- [x] Worker updates job status
+- [x] Error handling and failure logging
+- [x] Worker health checks
 
 **Worker Jobs**:
 
@@ -1165,22 +1165,40 @@ All connected clients for that job receive update immediately
 
 ---
 
-### 6.6 Phase 6: Monitoring & Logging (Week 4)
+### 6.6 Phase 6: Monitoring & Logging (Week 4) ✅ COMPLETED
 
 **Goal**: Observe what's happening in the system
 
 **Features**:
 
-- [ ] Structured logging (Pino) with correlation IDs
-- [ ] Prometheus metrics collection
-- [ ] Grafana dashboards
-- [ ] Key metrics:
-  - Queue depth (jobs waiting)
-  - Processing latency (avg time to complete)
-  - Worker uptime and health
-  - Job success/failure rates
-  - Redis memory usage
-- [ ] Basic health check dashboard
+- [x] Structured logging (Pino) with correlation IDs
+- [x] Prometheus metrics collection with prom-client
+- [x] Grafana dashboards infrastructure
+- [x] /metrics endpoint for Prometheus scraping
+- [x] Queue depth metrics (waiting, active, delayed, failed)
+- [x] Job processing latency histogram
+- [x] Job success/failure counters
+- [x] Worker online & jobs processed gauges
+- [x] HTTP request metrics (counter + duration)
+- [x] Auto-update metrics every 15 seconds
+- [x] Basic health check dashboard
+
+**Logging Features**:
+
+- [x] **Correlation IDs**: Unique request ID (`req.id`) generated via `pino-http`, propagated through API → Worker via Redis messages
+- [x] **Structured Logging**: JSON format with `level`, `time`, `msg`, `service`, `correlationId`, `userId`
+- [x] **Log Persistence**: Docker JSON file logging driver with rotation (max 10m per file, 3 files retained)
+- [x] **Cross-Service Tracing**: Same correlation ID appears in API logs, Worker logs, and Redis Pub/Sub events
+
+**Example Log Output**:
+
+```json
+// API Log
+{"level":30,"time":1717152345678,"correlationId":"550e8400-e29b-41d4-a716-446655440000","service":"systemvibe-api","userId":"user-123","msg":"Job created","jobId":"job-456"}
+
+// Worker Log (same correlation ID)
+{"level":30,"time":1717152346000,"correlationId":"550e8400-e29b-41d4-a716-446655440000","service":"worker-image","msg":"Job completed","jobId":"job-456","durationMs":1234}
+```
 
 **Metrics to Track**:
 
@@ -1197,14 +1215,17 @@ redis_memory_bytes                  # Redis usage
 
 - Prometheus scraping API metrics
 - Grafana dashboard with key charts
-- Correlation IDs in logs for tracing
+- Correlation IDs in logs for distributed tracing
+- Log persistence with Docker JSON file driver
+- Cross-service request tracing (API → Queue → Worker)
 - Health check endpoint returns detailed status
 
 **Learning**:
 
 - Observability fundamentals
 - Metrics collection and visualization
-- Distributed tracing concepts
+- Distributed tracing with correlation IDs
+- Structured logging best practices
 - Production monitoring patterns
 
 ---
@@ -2776,12 +2797,13 @@ logger.error(
 - [x] Job status broadcasts
 - [x] Progress updates
 
-### Phase 6 (Week 4): Monitoring ⏳ PENDING
+### Phase 6 (Week 4): Monitoring ✅
 
-- [ ] Prometheus metrics
-- [ ] Grafana dashboards
-- [ ] Structured logging with correlation IDs
-- [ ] /metrics endpoint for Prometheus scraping
+- [x] Prometheus infrastructure (docker-compose ready)
+- [x] Grafana dashboards (docker-compose ready)
+- [x] Structured logging with correlation IDs (Pino configured)
+- [x] /metrics endpoint with MetricsService (prom-client)
+- [x] Queue, worker, and HTTP metrics auto-collection
 
 ### Phase 7 (Week 4): Webhooks ⏳ PENDING
 
@@ -2876,7 +2898,9 @@ logger.error(
 This AGENT.md is a **living document** - update it as you discover new insights:
 
 ```
-[2025-01-XX] Phase X completed - Added learnings
+[2025-05-31] Phase 4 completed - Image Worker implementation with BullMQ, heartbeat mechanism, graceful shutdown
+[2025-05-31] Phase 5 completed - WebSocket real-time updates with Socket.IO and Redis Pub/Sub
+[2025-05-31] Phase 6 completed - Full monitoring stack with Prometheus, Grafana, prom-client metrics service with queue/worker/HTTP metrics
 [2025-01-XX] Architecture decision - Switched from X to Y because Z
 [2025-01-XX] New feature discovered - Added to nice-to-have list
 ```

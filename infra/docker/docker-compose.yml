@@ -76,6 +76,7 @@ services:
       DB_USER: systemvibe
       DB_PASSWORD: devpassword
       DB_NAME: systemvibe
+      LOG_LEVEL: info
     depends_on:
       postgres:
         condition: service_healthy
@@ -83,6 +84,14 @@ services:
         condition: service_healthy
     ports:
       - "3000:3000"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+        labels: "service,environment"
+    volumes:
+      - api_logs:/app/logs
     # volumes:
     #   - ../../apps/api/src:/app/src:ro
     #   - ../../apps/api/package.json:/app/package.json:ro
@@ -110,6 +119,13 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    volumes:
+      - worker_logs:/app/logs
     healthcheck:
       test: ["CMD-SHELL", "pgrep -f node || exit 1"]
       interval: 30s
@@ -165,6 +181,8 @@ volumes:
   redis_data:
   prometheus_data:
   grafana_data:
+  api_logs:
+  worker_logs:
 
 networks:
   systemvibe:
