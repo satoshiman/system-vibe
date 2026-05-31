@@ -1166,6 +1166,149 @@ BullMQ coordinates jobs using:
 
 </details>
 
+## Monitoring & Performance
+
+<details>
+<summary>What are P50 and P95?</summary>
+
+P50 and P95 are **percentiles** (phân vị) in statistics, commonly used to measure system performance:
+
+**P50 (50th percentile)**
+
+- Also known as the median value
+- 50% of measurements are less than or equal to this value
+- Represents the "typical" or average performance experience
+
+**P95 (95th percentile)**
+
+- 95% of measurements are less than or equal to this value
+- Represents performance for 95% of users
+- Helps identify outliers and worst-case scenarios
+
+**In monitoring and performance:**
+
+- **P50**: Shows the typical/average system performance
+- **P95**: Shows performance experienced by most users (excluding the worst 5%)
+- **P99**: Sometimes used to show near-worst-case performance
+
+**Example: Response Time**
+If P95 response time is 200ms:
+
+- 95% of requests are processed in 200ms or less
+- 5% of requests take longer than 200ms
+- Helps identify if performance issues affect a small subset of users
+
+**Why use percentiles instead of averages:**
+
+- Averages can be skewed by extreme outliers
+- Percentiles give a better picture of real user experience
+- P50 shows typical case, P95 shows common case, P99 shows worst case
+
+</details>
+
+<details>
+<summary>Why does `/api/metrics` return text format instead of JSON?</summary>
+
+The `/api/metrics` endpoint returns **Prometheus Exposition Format** (`text/plain`), not JSON. This is the standard format for Prometheus metrics.
+
+**Example format:**
+
+```
+# HELP systemvibe_queue_depth Current number of jobs waiting in queue
+# TYPE systemvibe_queue_depth gauge
+systemvibe_queue_depth{queue="image"} 5
+
+# HELP systemvibe_job_completed_total Total number of completed jobs
+# TYPE systemvibe_job_completed_total counter
+systemvibe_job_completed_total{type="resize",priority="high"} 42
+```
+
+**Why not JSON?**
+
+| Reason                  | Explanation                                                                  |
+| ----------------------- | ---------------------------------------------------------------------------- |
+| **Prometheus standard** | Prometheus only understands this text format when scraping metrics           |
+| **Metadata comments**   | `# HELP` and `# TYPE` lines explain each metric (not possible in JSON)       |
+| **Histogram support**   | Histograms need multiple lines (buckets, sum, count) - JSON would be complex |
+| **Performance**         | Text format is optimized for frequent scraping (every 5-15s)                 |
+
+**Code implementation:**
+
+`apps/api/src/modules/metrics/metrics.controller.ts`:
+
+```typescript
+res.set("Content-Type", "text/plain");
+res.send(metrics);
+```
+
+**Need JSON format?**
+
+Create a separate endpoint like `/api/metrics/json` if you need JSON for other purposes (e.g., frontend dashboard). Prometheus will continue to use the standard text format at `/api/metrics`.
+
+</details>
+
+<details>
+<summary>How does Prometheus store metrics from `/api/metrics`?</summary>
+
+The `/api/metrics` endpoint only returns a **snapshot** of current metrics at the moment of the request. Prometheus is responsible for storing historical data.
+
+**Data Flow:**
+
+```
+┌─────────────────┐     scrape (5s)      ┌─────────────────┐
+│   /api/metrics  │ ◄────────────────────  │   Prometheus    │
+│   (snapshot)    │    fetch current       │   (time-series  │
+│                 │    metrics at point    │    database)    │
+└─────────────────┘                       └────────┬────────┘
+                                                    │
+                                                    │ query
+                                                    ▼
+                                           ┌─────────────────┐
+                                           │     Grafana     │
+                                           │  (visualize)    │
+                                           └─────────────────┘
+```
+
+**How it works:**
+
+| Component          | Role                                                             |
+| ------------------ | ---------------------------------------------------------------- |
+| **`/api/metrics`** | Returns current values at request time (snapshot)                |
+| **Prometheus**     | Scrapes `/api/metrics` every 5 seconds, stores in time-series DB |
+| **Grafana**        | Queries Prometheus to display charts over time                   |
+
+**Example:**
+
+```
+Time    Queue Depth    Prometheus Stores
+────────────────────────────────────────
+10:00   5 jobs         systemvibe_queue_depth{queue="image"} 5 @10:00
+10:05   8 jobs         systemvibe_queue_depth{queue="image"} 8 @10:05
+10:10   3 jobs         systemvibe_queue_depth{queue="image"} 3 @10:10
+```
+
+**Configuration:**
+
+Prometheus scrape interval is configured in `infra/docker/prometheus.yml`:
+
+```yaml
+scrape_configs:
+  - job_name: "systemvibe-api"
+    static_configs:
+      - targets: ["host.docker.internal:3000"]
+    metrics_path: /api/metrics
+    scrape_interval: 5s # Pull metrics every 5 seconds
+```
+
+**Key Points:**
+
+- `/api/metrics` = real-time snapshot (no history)
+- Prometheus = historical storage (time-series database)
+- Without Prometheus, you only see current values, not trends over time
+- Grafana queries Prometheus, not the API directly
+
+</details>
+
 ## Testing
 
 <details>
