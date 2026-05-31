@@ -13,7 +13,13 @@
     "test": "npm run test --ws",
     "lint": "npm run lint --ws"
   },
-  "keywords": ["nestjs", "redis", "bullmq", "docker", "distributed-systems"],
-  "author": "Your Name",
+  "keywords": [
+    "nestjs",
+    "redis",
+    "bullmq",
+    "docker",
+    "distributed-systems"
+  ],
+  "author": "Truong Ngoc Vuong",
   "license": "MIT"
 }

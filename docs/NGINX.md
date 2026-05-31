@@ -173,7 +173,7 @@ Expected response:
     "database": "healthy",
     "redis": "healthy",
     "queue": "healthy",
-    "auth": "healthy"
+    "worker": "healthy"
   },
   "version": "0.3.0"
 }

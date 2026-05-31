@@ -70,11 +70,12 @@ services:
       context: ../../
       dockerfile: apps/api/Dockerfile
     container_name: systemvibe-api
-    env_file:
-      - ../../.env
     environment:
-      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
+      DATABASE_URL: postgresql://systemvibe:devpassword@postgres:5432/systemvibe
       REDIS_URL: redis://redis:6379
+      DB_USER: systemvibe
+      DB_PASSWORD: devpassword
+      DB_NAME: systemvibe
     depends_on:
       postgres:
         condition: service_healthy
@@ -82,11 +83,11 @@ services:
         condition: service_healthy
     ports:
       - "3000:3000"
-    volumes:
-      - ../../apps/api/src:/app/src:ro
-      - ../../apps/api/package.json:/app/package.json:ro
-      - ../../apps/api/tsconfig.json:/app/tsconfig.json:ro
-    command: npm run dev
+    # volumes:
+    #   - ../../apps/api/src:/app/src:ro
+    #   - ../../apps/api/package.json:/app/package.json:ro
+    #   - ../../apps/api/tsconfig.json:/app/tsconfig.json:ro
+    # command: npm run dev
     networks:
       - systemvibe
 

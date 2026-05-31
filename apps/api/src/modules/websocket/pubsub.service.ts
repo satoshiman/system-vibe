@@ -1,6 +1,7 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { Logger } from '@nestjs/common';
 import { JobsGateway } from './websocket.gateway';
+import { MetricsService } from '../metrics/metrics.service';
 import getRedisClient, { getSubscriberClient } from '@systemvibe/redis';
 import { Redis } from 'ioredis';
 
@@ -22,9 +23,12 @@ export class PubSubService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PubSubService.name);
   private redis: Redis;
   private subscriber: Redis;
-  private channels = ['job:status', 'job:progress'];
+  private channels = ['job:status', 'job:progress', 'job:metrics'];
 
-  constructor(private jobsGateway: JobsGateway) {
+  constructor(
+    private jobsGateway: JobsGateway,
+    private metricsService: MetricsService
+  ) {
     this.redis = getRedisClient();
     this.subscriber = getSubscriberClient();
   }
@@ -54,6 +58,8 @@ export class PubSubService implements OnModuleInit, OnModuleDestroy {
         this.handleJobStatus(data as JobStatusEvent);
       } else if (channel === 'job:progress') {
         this.handleJobProgress(data as JobProgressEvent);
+      } else if (channel === 'job:metrics') {
+        this.handleJobMetrics(data);
       }
     } catch (error) {
       this.logger.error(`Failed to parse message from ${channel}`, {
@@ -77,5 +83,19 @@ export class PubSubService implements OnModuleInit, OnModuleDestroy {
       progress: event.progress,
       message: event.message,
     });
+  }
+
+  private handleJobMetrics(data: any) {
+    this.logger.log(`Received job metrics event: ${data.jobId} - ${data.event}`);
+
+    if (data.event === 'job_completed') {
+      this.metricsService.recordJobCompleted(
+        data.type || 'unknown',
+        data.priority || 'normal',
+        data.durationSeconds || 0
+      );
+    } else if (data.event === 'job_failed') {
+      this.metricsService.recordJobFailed(data.type || 'unknown', data.durationSeconds || 0);
+    }
   }
 }

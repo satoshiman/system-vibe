@@ -102,9 +102,11 @@ curl http://localhost/api/health
 #   "services": {
 #     "api": "healthy",
 #     "database": "healthy",
-#     "redis": "healthy"
+#     "redis": "healthy",
+#     "queue": "healthy",
+#     "worker": "healthy"
 #   },
-#   "version": "0.1.0"
+#   "version": "0.3.0"
 # }
 ```
 
@@ -126,7 +128,9 @@ system-vibe/
 │   │   │   │   ├── health/  # Health check module
 │   │   │   │   ├── auth/    # Authentication module
 │   │   │   │   ├── jobs/    # Job queue module
-│   │   │   │   └── queue/   # BullMQ configuration
+│   │   │   │   ├── queue/   # BullMQ configuration
+│   │   │   │   ├── websocket/ # WebSocket gateway
+│   │   │   │   └── metrics/   # Prometheus metrics
 │   │   │   ├── common/      # Common utilities
 │   │   │   ├── config/      # Configuration
 │   │   │   ├── guards/      # Auth guards
@@ -623,9 +627,10 @@ Returns the health status of all services.
     "api": "healthy",
     "database": "healthy",
     "redis": "healthy",
-    "auth": "healthy"
+    "queue": "healthy",
+    "worker": "healthy"
   },
-  "version": "0.2.0"
+  "version": "0.3.0"
 }
 ```
 
@@ -882,6 +887,15 @@ docker compose down -v
 - [x] Worker publishes job status events (PROCESSING, COMPLETED, FAILED)
 - [x] Client subscription to job-specific channels
 - [x] Real-time progress updates support
+
+### Phase 6: Monitoring & Observability ✅
+
+- [x] Prometheus metrics collection
+- [x] Grafana dashboards
+- [x] Metrics interceptor for HTTP requests
+- [x] Worker job metrics via Redis Pub/Sub
+- [x] Queue depth monitoring
+- [x] Health check with queue and worker status
 
 ## Contributing
 

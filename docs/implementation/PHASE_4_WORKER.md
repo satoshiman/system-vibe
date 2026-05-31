@@ -52,8 +52,11 @@ cat > apps/worker-image/package.json << 'EOF'
     "@nestjs/common": "^10.0.0",
     "@nestjs/core": "^10.0.0",
     "@nestjs/bullmq": "^10.0.0",
+    "@prisma/client": "^5.0.0",
     "@systemvibe/config": "^1.0.0",
-    "@systemvibe/redis": "^1.0.0",
+    "@systemvibe/database": "^0.1.0",
+    "@systemvibe/redis": "^0.1.0",
+    "axios": "^1.16.1",
     "bullmq": "^5.0.0",
     "sharp": "^0.33.0",
     "pino": "^8.16.0",
@@ -142,6 +145,8 @@ import sharp from "sharp";
 import pino from "pino";
 import getRedisClient from "@systemvibe/redis";
 import { env } from "@systemvibe/config";
+import { PrismaService } from "@systemvibe/database";
+import { Injectable } from "@nestjs/common";
 
 const logger = pino({
   level: env.LOG_LEVEL,
@@ -189,32 +194,163 @@ interface ImageCompressJob {
 }
 
 @Processor("image")
+@Injectable()
 export class ImageProcessor extends WorkerHost {
   private heartbeatInterval: NodeJS.Timeout;
+  private jobStartTimes = new Map<string, number>();
+  private jobsProcessed = 0;
+  private jobsFailed = 0;
 
-  constructor() {
+  constructor(private prisma: PrismaService) {
     super();
     logger.info("ImageProcessor initialized");
     this.startHeartbeat();
   }
 
   @OnWorkerEvent("active")
-  onActive(job: Job) {
+  async onActive(job: Job) {
     logger.info(`Job started processing`, { jobId: job.id, name: job.name });
+
+    // Track start time for metrics
+    this.jobStartTimes.set(job.id!, Date.now());
+
+    // Update job status in database
+    try {
+      await this.prisma.job.update({
+        where: { id: job.id },
+        data: {
+          status: "PROCESSING",
+          startedAt: new Date(),
+        },
+      });
+    } catch (error) {
+      logger.error("Failed to update job status in database", {
+        jobId: job.id,
+        error: (error as Error).message,
+      });
+    }
+
+    // Publish job status to Redis Pub/Sub
+    await redis.publish(
+      "job:status",
+      JSON.stringify({
+        jobId: job.id,
+        status: "PROCESSING",
+      }),
+    );
   }
 
   @OnWorkerEvent("completed")
-  onCompleted(job: Job, result: any) {
+  async onCompleted(job: Job, result: any) {
+    const startTime = this.jobStartTimes.get(job.id!);
+    const durationMs = startTime ? Date.now() - startTime : 0;
+
+    this.jobsProcessed++;
+    this.jobStartTimes.delete(job.id!);
+
     logger.info(`Job completed`, { jobId: job.id, name: job.name, result });
+
+    // Update job status in database
+    try {
+      await this.prisma.job.update({
+        where: { id: job.id },
+        data: {
+          status: "COMPLETED",
+          completedAt: new Date(),
+          result: result as any,
+        },
+      });
+    } catch (error) {
+      logger.error("Failed to update job status in database", {
+        jobId: job.id,
+        error: (error as Error).message,
+      });
+    }
+
+    // Publish job status to Redis Pub/Sub
+    await redis.publish(
+      "job:status",
+      JSON.stringify({
+        jobId: job.id,
+        status: "COMPLETED",
+        result,
+      }),
+    );
+
+    // Publish job metrics for Prometheus
+    await redis.publish(
+      "job:metrics",
+      JSON.stringify({
+        event: "job_completed",
+        jobId: job.id,
+        type: job.name,
+        priority: job.data?.priority || "normal",
+        durationSeconds: durationMs / 1000,
+        timestamp: new Date().toISOString(),
+        workerId: WORKER_ID,
+      }),
+    );
   }
 
   @OnWorkerEvent("failed")
-  onFailed(job: Job, error: Error) {
+  async onFailed(job: Job, error: Error) {
+    const startTime = job?.id ? this.jobStartTimes.get(job.id) : null;
+    const durationMs = startTime ? Date.now() - startTime : 0;
+
+    this.jobsFailed++;
+    if (job?.id) {
+      this.jobStartTimes.delete(job.id);
+    }
+
     logger.error(`Job failed`, {
       jobId: job?.id,
       name: job?.name,
       error: error.message,
     });
+
+    // Update job status in database
+    if (job?.id) {
+      try {
+        await this.prisma.job.update({
+          where: { id: job.id },
+          data: {
+            status: "FAILED",
+            error: error.message,
+            attemptCount: { increment: 1 },
+          },
+        });
+      } catch (dbError) {
+        logger.error("Failed to update job status in database", {
+          jobId: job.id,
+          error: (dbError as Error).message,
+        });
+      }
+
+      // Publish job status to Redis Pub/Sub
+      await redis.publish(
+        "job:status",
+        JSON.stringify({
+          jobId: job.id,
+          status: "FAILED",
+          error: error.message,
+        }),
+      );
+
+      // Publish job metrics for Prometheus
+      await redis.publish(
+        "job:metrics",
+        JSON.stringify({
+          event: "job_failed",
+          jobId: job.id,
+          type: job.name,
+          priority: job.data?.priority || "normal",
+          durationSeconds: durationMs / 1000,
+          error: error.message,
+          timestamp: new Date().toISOString(),
+          workerId: WORKER_ID,
+        }),
+      );
+    }
   }
 
   private startHeartbeat() {
@@ -223,15 +359,23 @@ export class ImageProcessor extends WorkerHost {
         await redis.set(
           HEARTBEAT_KEY,
           JSON.stringify({
+            id: WORKER_ID,
             workerId: WORKER_ID,
             type: "image",
             timestamp: new Date().toISOString(),
             status: "active",
+            jobsProcessed: this.jobsProcessed,
+            jobsFailed: this.jobsFailed,
+            uptime: process.uptime(),
           }),
           "EX",
           HEARTBEAT_TTL,
         );
-        logger.debug("Heartbeat sent", { workerId: WORKER_ID });
+        logger.debug("Heartbeat sent", {
+          workerId: WORKER_ID,
+          jobsProcessed: this.jobsProcessed,
+          jobsFailed: this.jobsFailed,
+        });
       } catch (error) {
         logger.error("Failed to send heartbeat", { error: error.message });
       }
@@ -336,7 +480,10 @@ export class ImageProcessor extends WorkerHost {
   }
 
   private async simulateProcessing(ms: number) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+    // Random delay between 5-15 seconds for testing
+    const randomDelay = Math.floor(Math.random() * (15000 - 5000 + 1)) + 5000;
+    logger.info(`Simulating processing with ${randomDelay}ms delay`);
+    return new Promise((resolve) => setTimeout(resolve, randomDelay));
   }
 }
 EOF
@@ -359,6 +506,7 @@ EOF
 cat > apps/worker-image/src/worker.module.ts << 'EOF'
 import { Module } from "@nestjs/common";
 import { BullModule } from "@nestjs/bullmq";
+import { PrismaService } from "@systemvibe/database";
 import { ImageProcessor } from "./image.processor";
 import { RedisConfigService } from "./redis-config.service";
 
@@ -372,7 +520,7 @@ import { RedisConfigService } from "./redis-config.service";
       name: "image",
     }),
   ],
-  providers: [ImageProcessor, RedisConfigService],
+  providers: [ImageProcessor, RedisConfigService, PrismaService],
 })
 export class WorkerModule {}
 EOF

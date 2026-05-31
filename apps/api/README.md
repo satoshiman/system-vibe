@@ -15,6 +15,8 @@ This is the main API server built with NestJS, providing RESTful endpoints for t
 - **Logging**: Pino with pino-pretty
 - **API Documentation**: Swagger/OpenAPI
 - **Authentication**: JWT with Redis session management
+- **Monitoring**: Prometheus metrics with Grafana dashboards
+- **Real-time**: WebSocket for live job status updates
 
 ## Prerequisites
 
@@ -77,6 +79,45 @@ Queue monitoring dashboard is available at:
 http://localhost:3000/admin/queues
 ```
 
+### Prometheus Metrics
+
+Prometheus metrics endpoint (no authentication required):
+
+```
+GET /api/metrics
+```
+
+Returns metrics for:
+
+- Job queue depth, active jobs, completed/failed counts
+- Job processing duration histograms
+- Worker online status and jobs processed
+- HTTP request rate and duration
+- Node.js runtime metrics (event loop lag, GC, memory)
+
+### WebSocket Real-time Updates
+
+Connect to WebSocket for live job status:
+
+```javascript
+const ws = new WebSocket('ws://localhost:3000');
+
+ws.onopen = () => {
+  // Subscribe to job status
+  ws.send(
+    JSON.stringify({
+      event: 'subscribe',
+      data: { jobId: 'your-job-id' },
+    })
+  );
+};
+
+ws.onmessage = (event) => {
+  const message = JSON.parse(event.data);
+  console.log('Job status:', message.status);
+};
+```
+
 ### Available Scripts
 
 - `npm run dev` - Start in development mode with hot reload
@@ -98,7 +139,9 @@ apps/api/
 │   │   ├── health/       # Health check module
 │   │   ├── auth/         # Authentication module (JWT, Redis sessions)
 │   │   ├── queue/        # BullMQ queue configuration
-│   │   └── jobs/         # Job submission and management
+│   │   ├── jobs/         # Job submission and management
+│   │   ├── metrics/      # Prometheus metrics collection
+│   │   └── websocket/    # Real-time WebSocket updates
 │   ├── common/           # Common utilities and decorators
 │   ├── config/           # Configuration files
 │   ├── guards/           # Authentication guards
@@ -279,22 +322,48 @@ export class ModuleNameController {
 }
 ```
 
-## Docker
+## Docker Deployment
 
-### Build the Docker image
+### Build and Run Locally
 
 ```bash
+# Development mode (uses npm run dev with hot reload)
+npm run dev
+
+# Production build
 docker build -t systemvibe-api .
+docker run -p 3000:3000 systemvibe-api
 ```
 
-### Run with Docker Compose
+### Run with Docker Compose (Full Stack)
 
 From the project root:
 
 ```bash
 cd infra/docker
-docker compose up -d api
+docker compose up -d
 ```
+
+This starts:
+
+- **API** (`api:3000`) - NestJS API server
+- **Worker** (`worker-image`) - Job processors (scale with `--scale worker-image=5`)
+- **PostgreSQL** (`postgres:5432`) - Database
+- **Redis** (`redis:6379`) - Cache and message broker
+- **Prometheus** (`9090`) - Metrics collection
+- **Grafana** (`3001`) - Dashboards and visualization
+
+### Prometheus & Grafana
+
+**Prometheus UI:** http://localhost:9090
+**Grafana Dashboard:** http://localhost:3001
+
+Default Grafana credentials: `admin` / `admin`
+
+Pre-configured dashboards:
+
+- **SystemVibe Overview** - Queue metrics, worker status, job processing rates
+- **Node.js Metrics** - Runtime performance, event loop lag, memory usage
 
 ## Testing
 

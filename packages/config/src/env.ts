@@ -1,7 +1,7 @@
 import { z } from "zod";
 import dotenv from "dotenv";
 
-// Load .env file from root of project
+// Lazy load dotenv
 dotenv.config({ path: process.cwd() + "/.env" });
 
 const envSchema = z.object({
@@ -9,7 +9,7 @@ const envSchema = z.object({
   DATABASE_URL: z
     .string()
     .url()
-    .default("postgresql://systemvibe:devpassword@localhost:5432/systemvibe"),
+    .default("postgresql://systemvibe:devpassword@postgres:5432/systemvibe"),
   DB_USER: z.string().default("systemvibe"),
   DB_PASSWORD: z.string().default("devpassword"),
   DB_NAME: z.string().default("systemvibe"),
@@ -21,8 +21,8 @@ const envSchema = z.object({
     .default("development"),
 
   // Redis
-  REDIS_URL: z.string().default("redis://localhost:6379"),
-  REDIS_HOST: z.string().default("localhost"),
+  REDIS_URL: z.string().default("redis://redis:6379"),
+  REDIS_HOST: z.string().default("redis"),
   REDIS_PORT: z.string().transform(Number).default("6379"),
   REDIS_PASSWORD: z.string().optional(),
 
@@ -44,6 +44,8 @@ const envSchema = z.object({
 
 export type Env = z.infer<typeof envSchema>;
 
+let _env: Env | undefined;
+
 function validateEnv(): Env {
   try {
     return envSchema.parse(process.env);
@@ -64,4 +66,11 @@ function validateEnv(): Env {
   }
 }
 
-export const env = validateEnv();
+export const env = new Proxy({} as Env, {
+  get(_, prop: string) {
+    if (!_env) {
+      _env = validateEnv();
+    }
+    return (_env as Record<string, unknown>)[prop];
+  },
+});

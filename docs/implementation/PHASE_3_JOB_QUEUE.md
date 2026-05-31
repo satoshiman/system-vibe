@@ -458,7 +458,7 @@ export class JobsService {
     });
 
     // Add job to BullMQ queue
-    await this.jobsQueue.add(
+    await this.imageQueue.add(
       createJobDto.type,
       {
         jobId: job.id,
@@ -528,18 +528,8 @@ export class JobsService {
       this.prisma.job.count({ where }),
     ]);
 
-    const [jobs, total] = await Promise.all([
-      this.prisma.job.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { createdAt: 'desc' },
-      }),
-      this.prisma.job.count({ where }),
-    ]);
-
     return {
-      jobs: jobs.map((job: { [key: string]: unknown }) => this.toJobResponseDto(job)),
+      jobs: jobs.map((job) => this.toJobResponseDto(job)),
       total,
     };
   }
@@ -684,9 +674,13 @@ EOF
 cat > apps/api/src/app.module.ts << 'EOF'
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { APP_INTERCEPTOR } from '@nestjs/core';
 import { HealthModule } from './modules/health/health.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { JobsModule } from './modules/jobs/jobs.module';
+import { WebsocketModule } from './modules/websocket/websocket.module';
+import { MetricsModule } from './modules/metrics/metrics.module';
+import { MetricsInterceptor } from './modules/metrics/metrics.interceptor';
 import queueConfig from './config/queue.config';
 
 @Module({
@@ -698,6 +692,14 @@ import queueConfig from './config/queue.config';
     HealthModule,
     AuthModule,
     JobsModule,
+    WebsocketModule,
+    MetricsModule,
+  ],
+  providers: [
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: MetricsInterceptor,
+    },
   ],
 })
 export class AppModule {}
@@ -725,6 +727,13 @@ const logger = pino();
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // Enable CORS
+  app.enableCors({
+    origin: '*', // Allow all origins for development
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+    credentials: true,
+  });
 
   app.setGlobalPrefix('api');
 

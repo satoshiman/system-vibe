@@ -196,11 +196,13 @@ Update `apps/api/src/app.module.ts`:
 ```typescript
 import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
+import { APP_INTERCEPTOR } from "@nestjs/core";
 import { HealthModule } from "./modules/health/health.module";
 import { AuthModule } from "./modules/auth/auth.module";
 import { JobsModule } from "./modules/jobs/jobs.module";
 import { WebsocketModule } from "./modules/websocket/websocket.module";
 import { MetricsModule } from "./modules/metrics/metrics.module";
+import { MetricsInterceptor } from "./modules/metrics/metrics.interceptor";
 import queueConfig from "./config/queue.config";
 
 @Module({
@@ -214,6 +216,12 @@ import queueConfig from "./config/queue.config";
     JobsModule,
     WebsocketModule,
     MetricsModule,
+  ],
+  providers: [
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: MetricsInterceptor,
+    },
   ],
 })
 export class AppModule {}
@@ -236,21 +244,24 @@ Update `infra/docker/docker-compose.yml`:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
     networks:
-      - systemvibe-network
+      - systemvibe
 
   grafana:
     image: grafana/grafana:latest
     container_name: systemvibe-grafana
     volumes:
       - grafana_data:/var/lib/grafana
-      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards
-      - ./grafana/datasources:/etc/grafana/provisioning/datasources
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
     ports:
       - "3001:3000"
     environment:
+      - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=http://localhost:3001
     networks:
-      - systemvibe-network
+      - systemvibe
     depends_on:
       - prometheus
 
