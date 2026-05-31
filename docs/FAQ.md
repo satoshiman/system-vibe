@@ -1310,6 +1310,160 @@ scrape_configs:
 </details>
 
 <details>
+<summary>What is Correlation ID and how does it work in SystemVibe?</summary>
+
+**What is Correlation ID?**
+
+Correlation ID is a unique identifier attached to every request that flows through multiple services in a distributed system. It allows you to trace a single request across different components (API, queue, workers, etc.) by tagging all related logs with the same ID.
+
+**Why is Correlation ID important?**
+
+In distributed systems, a single user request can touch multiple services:
+
+```
+Client → API → Queue → Worker → Database
+        ↓      ↓       ↓
+       Logs scattered across 3+ services
+```
+
+Without Correlation ID, when something goes wrong, you have to manually search logs across all services. With Correlation ID:
+
+```bash
+# Find all logs for a specific request across all services
+docker compose logs api | grep "abc-123"
+docker compose logs worker-image | grep "abc-123"
+```
+
+**How Correlation ID Works in SystemVibe:**
+
+![Correlation ID Flow](https://www.figma.com/online-whiteboard/create-diagram/33d4052b-e8f9-4b50-b978-bb9a536c1826)
+
+**Flow:**
+
+1. **Client sends request** with optional `X-Correlation-Id` header
+2. **API receives request** via `pino-http` middleware
+   - If header exists: uses it
+   - If not: generates new UUID
+   - Sets `X-Correlation-Id` in response header
+3. **API passes ID to BullMQ** job data via `jobs.service.ts`
+4. **Worker receives job** with correlation ID in `job.data.correlationId`
+5. **Worker creates logger** with correlation ID for structured logging
+6. **All logs** (API + Worker) contain same correlation ID
+
+**Implementation Details:**
+
+**API Layer** (`apps/api/src/main.ts`):
+
+```typescript
+app.use(
+  pinoHttp({
+    genReqId: (req, res) => {
+      const existingId = req.headers["x-correlation-id"] as string;
+      if (existingId) return existingId;
+      const id = uuidv4();
+      res.setHeader("X-Correlation-Id", id);
+      return id;
+    },
+  }),
+);
+```
+
+**Service Layer** (`apps/api/src/modules/jobs/jobs.service.ts`):
+
+```typescript
+async create(createJobDto: CreateJobDto, correlationId?: string) {
+  await this.imageQueue.add(
+    createJobDto.type,
+    {
+      jobId: job.id,
+      correlationId, // Pass to worker
+    },
+    { ... }
+  );
+}
+```
+
+**Worker Layer** (`apps/worker-image/src/image.processor.ts`):
+
+```typescript
+const createLogger = (correlationId?: string) => {
+  return pino({
+    base: {
+      service: "worker-image",
+      correlationId: correlationId || "unknown",
+    },
+  });
+};
+
+@OnWorkerEvent("active")
+async onActive(job: Job) {
+  const correlationId = job.data.correlationId as string;
+  const jobLogger = createLogger(correlationId);
+  jobLogger.info("Job started processing", { correlationId });
+}
+```
+
+**Usage Examples:**
+
+**1. Client provides correlation ID:**
+
+```bash
+curl -X POST http://localhost:3000/api/jobs \
+  -H "X-Correlation-Id: my-trace-123" \
+  -H "Content-Type: application/json" \
+  -d '{"type":"image-resize","payload":{...}}'
+```
+
+Response header: `X-Correlation-Id: my-trace-123`
+
+**2. Search logs by correlation ID:**
+
+```bash
+# Find all logs across services
+docker compose logs api | grep "my-trace-123"
+docker compose logs worker-image | grep "my-trace-123"
+```
+
+**3. View structured logs:**
+
+```json
+// API Log
+{
+  "level": 30,
+  "service": "systemvibe-api",
+  "req": { "id": "my-trace-123", "method": "POST", "url": "/api/jobs" },
+  "msg": "request completed"
+}
+
+// Worker Log
+{
+  "level": 30,
+  "service": "worker-image",
+  "correlationId": "my-trace-123",
+  "msg": "Job completed"
+}
+```
+
+**Benefits:**
+
+| Without Correlation ID                  | With Correlation ID                   |
+| --------------------------------------- | ------------------------------------- |
+| Hard to trace requests                  | Easy to follow request flow           |
+| Manual log correlation                  | Single search query                   |
+| Cannot debug distributed issues         | Full visibility across services       |
+| Support tickets are hard to investigate | Quickly identify where failures occur |
+
+**Best Practices:**
+
+1. **Generate at entry point**: API gateway or load balancer should generate if not provided
+2. **Propagate through all services**: Pass to queues, workers, downstream APIs
+3. **Include in all logs**: Use structured logging with correlation ID in base context
+4. **Return in response**: Let clients use their correlation ID for support tickets
+5. **Use in error tracking**: Include in error reports for faster debugging
+
+</details>
+
+<details>
 <summary>Who creates Correlation ID - client or server?</summary>
 
 **Both can create - depending on the scenario:**
