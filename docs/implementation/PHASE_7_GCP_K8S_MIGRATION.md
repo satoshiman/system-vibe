@@ -704,6 +704,69 @@ jobs:
 
 ---
 
+## Step 8 — Ingress + Load Balancer (Replacing Nginx)
+
+Local development uses Nginx. On GKE, use **GKE Ingress** with Cloud Load Balancer.
+
+```bash
+# 1. Reserve static IP
+gcloud compute addresses create system-vibe-ip --global
+export STATIC_IP=$(gcloud compute addresses describe system-vibe-ip --global --format='value(address)')
+echo "IP: $STATIC_IP  # Add to DNS A record"
+```
+
+```yaml
+# infra/k8s/ingress/certificate.yaml
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: system-vibe-cert
+  namespace: system-vibe
+spec:
+  domains:
+    - api.systemvibe.com
+```
+
+```yaml
+# infra/k8s/ingress/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: api-ingress
+  namespace: system-vibe
+  annotations:
+    kubernetes.io/ingress.class: "gce"
+    kubernetes.io/ingress.global-static-ip-name: "system-vibe-ip"
+    networking.gke.io/managed-certificates: "system-vibe-cert"
+    kubernetes.io/ingress.allow-http: "false"
+spec:
+  rules:
+    - host: api.systemvibe.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: api
+                port:
+                  number: 80
+```
+
+```bash
+kubectl apply -f infra/k8s/ingress/
+kubectl get managedcertificate -n system-vibe -w  # Wait 5-15 min
+```
+
+**Features:**
+
+- Google-managed SSL (auto-renew)
+- Global load balancing
+- DDoS protection
+- HTTPS redirect
+
+---
+
 ## Step 13 — Monitoring & Observability
 
 The project already exposes Prometheus metrics (`apps/api/src/modules/metrics/`). On GKE, you have 2 options:

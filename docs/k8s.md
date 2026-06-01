@@ -14,10 +14,13 @@ infra/k8s/
 │   └── deployment.yaml         # Worker deployment + Cloud SQL Proxy sidecar
 ├── jobs/
 │   └── prisma-migrate.yaml     # One-time migration job
-└── monitoring/
-    ├── podmonitoring.yaml      # GMP PodMonitoring for metrics scraping
-    ├── dashboard.json          # Cloud Monitoring dashboard definition
-    └── alerting-policy.yaml    # Alerting policy template
+├── monitoring/
+│   ├── podmonitoring.yaml      # GMP PodMonitoring for metrics scraping
+│   ├── dashboard.json          # Cloud Monitoring dashboard definition
+│   └── alerting-policy.yaml    # Alerting policy template
+└── ingress/
+    ├── ingress.yaml            # GKE Ingress (Cloud Load Balancer)
+    └── certificate.yaml        # Managed SSL certificate
 ```
 
 ### File Descriptions
@@ -32,6 +35,8 @@ infra/k8s/
 | `monitoring/podmonitoring.yaml`   | Metrics collection              | GMP resource to scrape /metrics endpoints       |
 | `monitoring/dashboard.json`       | Visualization                   | Cloud Monitoring dashboard widgets              |
 | `monitoring/alerting-policy.yaml` | Alerts                          | High latency & error rate thresholds            |
+| `ingress/ingress.yaml`            | External access                 | GKE Ingress + Cloud Load Balancer               |
+| `ingress/certificate.yaml`        | SSL certificate                 | Google-managed SSL for HTTPS                    |
 
 ### Architecture Pattern
 

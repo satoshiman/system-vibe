@@ -1,0 +1,26 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: api-ingress
+  namespace: system-vibe
+  annotations:
+    # GKE Ingress Controller
+    kubernetes.io/ingress.class: "gce"
+    # Global static IP (create first: gcloud compute addresses create system-vibe-ip --global)
+    kubernetes.io/ingress.global-static-ip-name: "system-vibe-ip"
+    # Managed SSL certificate (create first)
+    networking.gke.io/managed-certificates: "system-vibe-cert"
+    # Redirect HTTP to HTTPS
+    kubernetes.io/ingress.allow-http: "false"
+spec:
+  rules:
+    - host: api.systemvibe.com  # Replace with your domain
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: api
+                port:
+                  number: 80

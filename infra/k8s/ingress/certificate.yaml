@@ -1,0 +1,8 @@
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: system-vibe-cert
+  namespace: system-vibe
+spec:
+  domains:
+    - systemvibe.kudos.games

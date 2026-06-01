@@ -174,7 +174,8 @@ system-vibe/
 │       ├── api/
 │       ├── worker/
 │       ├── jobs/
-│       └── monitoring/
+│       ├── monitoring/
+│       └── ingress/
 ├── docs/                    # Documentation
 │   └── implementation/      # Phase implementation guides
 │       ├── PHASE_1_GETTING_STARTED.md
