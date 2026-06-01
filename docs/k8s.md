@@ -1,10 +1,65 @@
 # Kubernetes Deployment Troubleshooting Guide
 
+## Directory Structure: `infra/k8s/`
+
+The `infra/k8s/` directory contains all Kubernetes manifests for deploying SystemVibe to GKE.
+
+```
+infra/k8s/
+├── namespace.yaml              # Namespace definition
+├── api/
+│   ├── deployment.yaml         # API server deployment + Cloud SQL Proxy sidecar
+│   └── service.yaml            # ClusterIP service for API
+├── worker/
+│   └── deployment.yaml         # Worker deployment + Cloud SQL Proxy sidecar
+├── jobs/
+│   └── prisma-migrate.yaml     # One-time migration job
+└── monitoring/
+    ├── podmonitoring.yaml      # GMP PodMonitoring for metrics scraping
+    ├── dashboard.json          # Cloud Monitoring dashboard definition
+    └── alerting-policy.yaml    # Alerting policy template
+```
+
+### File Descriptions
+
+| File                              | Purpose                         | Key Components                                  |
+| --------------------------------- | ------------------------------- | ----------------------------------------------- |
+| `namespace.yaml`                  | Creates `system-vibe` namespace | Isolates all resources                          |
+| `api/deployment.yaml`             | Deploys API server              | NestJS app + Cloud SQL Proxy sidecar            |
+| `api/service.yaml`                | Exposes API internally          | ClusterIP:80 → Pod:3000                         |
+| `worker/deployment.yaml`          | Deploys image worker            | BullMQ processor + Cloud SQL Proxy              |
+| `jobs/prisma-migrate.yaml`        | Database migrations             | Init container pattern with sidecar termination |
+| `monitoring/podmonitoring.yaml`   | Metrics collection              | GMP resource to scrape /metrics endpoints       |
+| `monitoring/dashboard.json`       | Visualization                   | Cloud Monitoring dashboard widgets              |
+| `monitoring/alerting-policy.yaml` | Alerts                          | High latency & error rate thresholds            |
+
+### Architecture Pattern
+
+All pods follow the **sidecar pattern** with Cloud SQL Proxy:
+
+```
+┌─────────────────────────────┐
+│           Pod               │
+│  ┌─────────────────────┐   │
+│  │  Application        │   │
+│  │  (API/Worker)       │   │
+│  │  → localhost:5432   │   │
+│  └─────────────────────┘   │
+│  ┌─────────────────────┐   │
+│  │ Cloud SQL Proxy     │   │
+│  │  → Cloud SQL DB     │   │
+│  └─────────────────────┘   │
+└─────────────────────────────┘
+```
+
+---
+
 ## Common Issues and Solutions
 
 ### 1. Environment Variable Mismatch: `API_PORT` vs `PORT`
 
 **Symptom:**
+
 ```
 RangeError: options.port should be >= 0 and < 65536. Received type number (NaN).
 ```
@@ -14,6 +69,7 @@ The Kubernetes secret had `PORT=3000` but the application config expected `API_P
 
 **Fix:**
 Patch the secret to add the correct variable:
+
 ```bash
 kubectl patch secret -n system-vibe system-vibe-secrets --type='json' \
   -p='[{"op": "add", "path": "/data/API_PORT", "value": "MzAwMA=="}]'
@@ -21,6 +77,7 @@ kubectl patch secret -n system-vibe system-vibe-secrets --type='json' \
 
 **Prevention:**
 Ensure `.env.example` and Kubernetes secrets are in sync. The config expects:
+
 ```env
 API_PORT=3000
 ```
@@ -30,11 +87,12 @@ API_PORT=3000
 ### 2. Prisma Binary Target Mismatch on Alpine Linux
 
 **Symptom:**
+
 ```
-PrismaClientInitializationError: Prisma Client could not locate the Query Engine 
+PrismaClientInitializationError: Prisma Client could not locate the Query Engine
 for runtime "linux-musl-openssl-3.0.x".
 
-This happened because Prisma Client was generated for "linux-musl", 
+This happened because Prisma Client was generated for "linux-musl",
 but the actual deployment required "linux-musl-openssl-3.0.x".
 ```
 
@@ -43,19 +101,21 @@ Worker image uses `node:20-alpine` (musl-based), but Prisma client was generated
 
 **Fix:**
 Update `packages/database/prisma/schema.prisma`:
+
 ```prisma
 generator client {
   provider = "prisma-client-js"
   binaryTargets = [
-    "native", 
-    "linux-arm64-openssl-3.0.x", 
-    "debian-openssl-3.0.x", 
+    "native",
+    "linux-arm64-openssl-3.0.x",
+    "debian-openssl-3.0.x",
     "linux-musl-openssl-3.0.x"  // Required for Alpine
   ]
 }
 ```
 
 Then regenerate Prisma client during build:
+
 ```bash
 npx prisma generate --schema=packages/database/prisma/schema.prisma
 ```
@@ -65,8 +125,9 @@ npx prisma generate --schema=packages/database/prisma/schema.prisma
 ### 3. Missing OpenSSL Libraries in Alpine Runtime
 
 **Symptom:**
+
 ```
-Prisma connection failed: Error loading shared library libssl.so.1.1: 
+Prisma connection failed: Error loading shared library libssl.so.1.1:
 No such file or directory (needed by libquery_engine-linux-musl.so.node)
 ```
 
@@ -75,6 +136,7 @@ Alpine Linux runtime stage missing required SSL libraries for Prisma.
 
 **Fix:**
 Update `apps/worker-image/Dockerfile` runtime stage:
+
 ```dockerfile
 FROM node:20-alpine
 
@@ -87,6 +149,7 @@ RUN apk add --no-cache vips-dev openssl libssl3
 ### 4. Platform Architecture Mismatch (ARM64 → AMD64)
 
 **Symptom:**
+
 ```
 exec /usr/local/bin/docker-entrypoint.sh: exec format error
 ```
@@ -96,6 +159,7 @@ Building on Mac ARM64 (Apple Silicon) but deploying to GKE AMD64 nodes.
 
 **Fix:**
 Build with explicit platform targeting:
+
 ```bash
 docker build --platform linux/amd64 \
   -f apps/worker-image/Dockerfile \
@@ -107,6 +171,7 @@ docker build --platform linux/amd64 \
 ### 5. Missing Cloud SQL Proxy Sidecar
 
 **Symptom:**
+
 ```
 Prisma connection failed: Can't reach database server at `localhost:5432`
 ```
@@ -116,11 +181,12 @@ Worker deployment missing the Cloud SQL Proxy sidecar that API deployment had.
 
 **Fix:**
 Add sidecar container to `infra/k8s/worker/deployment.yaml`:
+
 ```yaml
 containers:
   - name: worker
     # ... worker container config
-    
+
   - name: cloud-sql-proxy
     image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2
     args:
