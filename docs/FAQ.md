@@ -76,6 +76,63 @@ For SystemVibe, JWT should be stored in **HttpOnly Cookies** rather than localSt
 </details>
 
 <details>
+<summary>What is the difference between Worker and Webhook? When to use each?</summary>
+
+When designing a distributed system like SystemVibe, classifying a background task as **Worker** or **Webhook Delivery Service** depends on answering: **"Where does the output go and who controls the receiving infrastructure?"**
+
+Here are 4 core criteria to distinguish them when designing architecture:
+
+### 1. Network Boundary & Infrastructure Control (Most Important)
+
+This is the primary criterion for drawing the boundary between the two services.
+
+- **Worker (Internal-Facing):** Only interacts with components **inside** your private network (VPC) - Database, Redis, S3 Storage. You have full control over these. If S3 is slow, you can upgrade bandwidth; if Database is congested, you can optimize indexes.
+- **Webhook (External-Facing):** Must interact with systems on the **public Internet** - specifically the client's URL/Server. You are **completely blind** to their infrastructure. Their server might use slow languages, be infected with malware, be powered off, or have firewalls blocking your requests.
+
+### 2. Error Behavior & Retry Strategy
+
+How the system handles failures determines the queue architecture.
+
+- **For Worker:** Errors are typically **Logic or Data** errors.
+  - _Examples:_ Code bugs, corrupted uploaded files.
+  - _Strategy:_ Immediate retry 2-3 times. If still failing, push to **Dead Letter Queue (DLQ)** for developers to investigate. Retrying 100 times won't fix a corrupted file.
+
+- **For Webhook:** Errors are typically **Network or Temporary Overload** from the partner side.
+  - _Examples:_ Client server under maintenance (503), temporary outage.
+  - _Strategy:_ Use **Exponential Backoff** (retry after 5 min, 15 min, 1 hour, 6 hours...). Space out retries to give their server time to recover, avoiding unintentional DDoS on their struggling system.
+
+### 3. Resource Utilization Profile
+
+This helps optimize infrastructure costs on Cloud (AWS, GCP) or Docker.
+
+- **Worker:** Usually **CPU-Bound** or **Memory-Bound**. Tasks like video processing (FFmpeg), image compression (Sharp), data analysis (AI/ML), heavy PDF/Excel exports require servers with multi-core CPU and large RAM.
+- **Webhook:** Purely **I/O-Bound (Network I/O)**. No heavy computation - just read from DB/Queue, package into JSON, send via HTTP. Requires optimizing concurrent connections and network bandwidth. Can run on cheap, low-CPU nodes.
+
+### 4. Push vs Pull Model (Data Flow)
+
+- **Worker uses Pull model:** Your system actively "pulls" jobs from internal queue to process. You control the pull rate (throttling) based on your hardware capacity.
+- **Webhook uses Push model:** Your system "pushes" data to another system. You must follow their rules (e.g., _"Max 10 webhooks/second to our server or we block your IP"_). You need a separate Webhook service to control output rate (Rate Limiting per Client).
+
+### 💡 Rule of Thumb
+
+Look at the last line of your background task code:
+
+1. If the last line is: `await prisma.user.update(...)` or `await s3.upload(...)` → **Choose Worker**
+2. If the last line is: `await axios.post(client_callback_url, data)` → **Separate into Webhook Service**
+
+**SystemVibe Examples:**
+
+| Task                        | Output Destination | Type    |
+| --------------------------- | ------------------ | ------- |
+| Image resize                | S3 (internal)      | Worker  |
+| Job status notification     | Client's HTTPS URL | Webhook |
+| PDF export                  | Database + Storage | Worker  |
+| Email via SendGrid API      | External API       | Webhook |
+| Database aggregation report | PostgreSQL         | Worker  |
+
+</details>
+
+<details>
 <summary>What is the difference between Redis Commander and RedisInsight?</summary>
 
 Both Redis Commander and RedisInsight are GUI tools for inspecting Redis data, but they have different characteristics:
@@ -1577,5 +1634,539 @@ Writing tests in SystemVibe follows these criteria:
 - 10% E2E tests
 
 See details at [docs/TEST.md](./TEST.md)
+
+</details>
+
+## Kubernetes
+
+<details>
+<summary>Why does Cloud SQL Proxy appear in both API and Worker pods?</summary>
+
+**Because both services need to connect to the database through Cloud SQL Proxy.**
+
+```
+┌─────────────────────────────┐     ┌─────────────────────────────┐
+│      API Pod                │     │     Worker Pod              │
+│  ┌─────────────────────┐   │     │  ┌─────────────────────┐     │
+│  │  API (NestJS)       │   │     │  │  Worker (BullMQ)    │     │
+│  │  → localhost:5432   │   │     │  │  → localhost:5432   │     │
+│  └─────────────────────┘   │     │  └─────────────────────┘     │
+│  ┌─────────────────────┐   │     │  ┌─────────────────────┐     │
+│  │  Cloud SQL Proxy    │   │     │  │  Cloud SQL Proxy    │     │
+│  │  → Cloud SQL DB     │   │     │  │  → Cloud SQL DB     │     │
+│  └─────────────────────┘   │     │  └─────────────────────┘     │
+└─────────────────────────────┘     └─────────────────────────────┘
+```
+
+**Why each pod needs its own proxy:**
+
+| Reason                | Explanation                                                          |
+| --------------------- | -------------------------------------------------------------------- |
+| **Network Isolation** | Each pod has its own network namespace - they cannot share localhost |
+| **Security**          | Each pod has its own encrypted tunnel to the database                |
+| **High Availability** | If one proxy fails, only that pod is affected                        |
+| **Simplicity**        | No need for shared proxy service or complex networking               |
+
+**Alternative approaches (not used):**
+
+- **Shared proxy service**: Would require all pods to connect to a single proxy endpoint, creating a single point of failure
+- **Direct connection**: Would expose database credentials in application code
+
+The sidecar pattern (proxy in same pod) is the recommended approach for Cloud SQL on Kubernetes.
+
+</details>
+
+<details>
+<summary>What does "2/2 Ready" mean in pod status?</summary>
+
+**"2/2 Ready" means 2 out of 2 containers in the pod are ready to accept traffic.**
+
+**Example - API Pod:**
+
+```
+Pod: api-79c54bc5f7-7ccws
+├── Container 1: api ✅ Ready (NestJS app on port 3000)
+└── Container 2: cloud-sql-proxy ✅ Ready (proxy on port 5432)
+```
+
+**Understanding Ready column:**
+
+| Status | Meaning                                                         |
+| ------ | --------------------------------------------------------------- |
+| `0/2`  | No containers ready (starting or crashed)                       |
+| `1/2`  | 1 container ready, 1 not ready (usually sidecar still starting) |
+| `2/2`  | All containers ready (fully operational)                        |
+
+**Check individual containers:**
+
+```bash
+kubectl get pod <pod-name> -o jsonpath='{range .status.containerStatuses[*]}{.name}{"\t"}{.ready}{"\n"}{end}'
+```
+
+Output:
+
+```
+api                  true
+cloud-sql-proxy      true
+```
+
+**Note:** The `cloud-sql-proxy` container doesn't have a readiness probe defined, so Kubernetes considers it ready immediately after it starts.
+
+</details>
+
+<details>
+<summary>Why don't I see Redis and PostgreSQL pods/containers like in Docker Compose?</summary>
+
+**In GKE production, you use managed services instead of containers:**
+
+| Docker Compose (Local) | GKE (Production)             | Benefits                                 |
+| ---------------------- | ---------------------------- | ---------------------------------------- |
+| Redis container        | **Memorystore for Redis**    | Managed, auto-scaling, high availability |
+| PostgreSQL container   | **Cloud SQL for PostgreSQL** | Automated backups, replication, patching |
+
+**Architecture difference:**
+
+```
+Docker Compose (Local)                GKE (Production)
+┌─────────────────────────┐          ┌─────────────────────────┐
+│  Local Machine          │          │  GKE Cluster            │
+│                         │          │                         │
+│  ┌─────────────────┐    │          │  ┌─────────┐ ┌────────┐ │
+│  │ Redis Container │    │          │  │ API Pod │ │ Worker │ │
+│  │ Port: 6379      │    │          │  │ + Proxy │ │ + Proxy│ │
+│  └─────────────────┘    │          │  └────┬────┘ └───┬────┘ │
+│                         │          │       └────┬────┘      │
+│  ┌─────────────────┐    │          │            │           │
+│  │ Postgres        │    │          │  ┌─────────┴─────────┐ │
+│  │ Container       │    │          │  │  Cloud SQL Proxy  │ │
+│  │ Port: 5432      │    │          │  │  (Sidecar)        │ │
+│  └─────────────────┘    │          │  └───────────────────┘ │
+└─────────────────────────┘          └─────────────────────────┘
+                                              │
+                    ┌───────────────────────────┘
+                    │
+         ┌──────────┴──────────┐
+         │                     │
+  ┌──────▼──────┐     ┌───────▼───────┐
+  │ Memorystore │     │  Cloud SQL    │
+  │ for Redis   │     │ for Postgres  │
+  └─────────────┘     └───────────────┘
+```
+
+**Connection in K8s:**
+
+- **Redis**: Direct connection via private IP (configured in secret)
+- **PostgreSQL**: Through Cloud SQL Proxy sidecar for security
+
+**Why managed services?**
+
+- No pod management (no `CrashLoopBackOff` for database)
+- Automatic backups and point-in-time recovery
+- Scaling without managing storage
+- Google handles patching and maintenance
+- VPC-native private connectivity (no public IP exposure)
+
+</details>
+
+<details>
+<summary>How to scale Redis and PostgreSQL in production?</summary>
+
+**Current Setup (Development/Basic):**
+
+| Service    | Current Tier                 | Scaling Options                       |
+| ---------- | ---------------------------- | ------------------------------------- |
+| Redis      | Memorystore Basic (1GB)      | Upgrade to Standard HA                |
+| PostgreSQL | Cloud SQL db-f1-micro (10GB) | Enable Regional HA, add Read Replicas |
+
+**Scale Redis (Memorystore):**
+
+```bash
+# Upgrade to Standard HA with replica
+# (2 nodes: 1 primary + 1 replica, automatic failover)
+gcloud redis instances update system-vibe-redis \
+  --tier=standard \
+  --size=5 \
+  --region=asia-southeast1
+
+# Or just increase memory size
+gcloud redis instances update system-vibe-redis \
+  --size=10 \
+  --region=asia-southeast1
+```
+
+**Scale PostgreSQL (Cloud SQL):**
+
+```bash
+# Enable High Availability (Regional)
+# (2 zones: primary + standby, automatic failover)
+gcloud sql instances patch system-vibe-db \
+  --availability-type=REGIONAL \
+  --tier=db-g1-small
+
+# Add Read Replica (for read-heavy workloads)
+gcloud sql instances create system-vibe-db-replica-1 \
+  --master-instance-name=system-vibe-db \
+  --tier=db-f1-micro \
+  --region=asia-southeast1
+```
+
+**Architecture after scaling:**
+
+```
+┌─────────────────────────────────────────┐
+│      Memorystore Redis HA             │
+│                                         │
+│   ┌─────────┐         ┌─────────┐      │
+│   │ Primary │ ←────── │ Replica │      │
+│   │  6379   │  sync   │  6379   │      │
+│   └─────────┘         └─────────┘      │
+│        ↑                                │
+│        │ (automatic failover)          │
+│   ┌────┴────┐                          │
+│   │  Client │                          │
+│   └─────────┘                          │
+└─────────────────────────────────────────┘
+
+┌─────────────────────────────────────────┐
+│         Cloud SQL HA + Replicas         │
+│                                         │
+│   ┌─────────┐         ┌─────────┐      │
+│   │ Primary │ ←────── │ Standby │      │
+│   │  (R/W)  │  sync   │  (HA)   │      │
+│   │ Zone A  │         │ Zone B  │      │
+│   └────┬────┘         └─────────┘      │
+│        │                                │
+│   ┌────┴─────────┐                     │
+│   │ Read Replica │ (for analytics)      │
+│   │    (R/O)     │                     │
+│   └──────────────┘                     │
+└─────────────────────────────────────────┘
+```
+
+**Application Changes (for read replicas):**
+
+To utilize read replicas, update Prisma configuration:
+
+```typescript
+// packages/config/src/env.ts
+DATABASE_URL: z.string().url(),           // Primary (writes)
+DATABASE_REPLICA_URL: z.string().url().optional(), // Replica (reads)
+
+// packages/database/src/prisma.service.ts
+// Use replica for read operations, primary for writes
+```
+
+**When to scale:**
+
+| Metric               | Threshold       | Action                              |
+| -------------------- | --------------- | ----------------------------------- |
+| Redis memory usage   | > 80%           | Increase size or upgrade to HA      |
+| Database CPU         | > 70% sustained | Upgrade tier or add replica         |
+| Database connections | > 80%           | Increase connection pool or upgrade |
+| Read/write ratio     | > 10:1          | Add read replica                    |
+
+**Cost considerations:**
+
+- **Redis Standard HA**: ~2x cost of Basic (but with HA)
+- **Cloud SQL Regional**: ~2x cost of Zonal (but with HA)
+- **Read Replicas**: Additional cost per replica (use only if needed)
+
+</details>
+
+<details>
+<summary>What about Prometheus and Grafana in production?</summary>
+
+**Current Status:**
+
+| Environment                | Prometheus      | Grafana         | Notes                                        |
+| -------------------------- | --------------- | --------------- | -------------------------------------------- |
+| **Local (Docker Compose)** | ✅ Container    | ✅ Container    | Defined in `infra/docker/docker-compose.yml` |
+| **GKE Production**         | ❌ Not deployed | ❌ Not deployed | Need to choose monitoring approach           |
+
+**Option 1: Google Managed Prometheus (Recommended)**
+
+Fully managed monitoring for GKE:
+
+```bash
+# Enable GMP (one-time)
+gcloud container clusters update system-vibe-cluster \
+  --enable-managed-prometheus \
+  --region=asia-southeast1
+
+# Deploy collectors (automatically scrapes pods)
+kubectl apply -f https://raw.githubusercontent.com/GoogleCloudPlatform/prometheus-engine/main/manifests/setup.yaml
+```
+
+**Pros:**
+
+- No Prometheus server to manage
+- Auto-scaling storage
+- Integrated with Cloud Monitoring
+- Grafana can use GMP as data source
+
+**Option 2: Self-Hosted Prometheus/Grafana**
+
+Deploy via Helm chart:
+
+```bash
+# Add Prometheus Helm repo
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+
+# Install Prometheus + Grafana
+helm install monitoring prometheus-community/kube-prometheus-stack \
+  --namespace monitoring \
+  --create-namespace \
+  --set grafana.adminPassword=admin \
+  --set prometheus.prometheusSpec.retention=15d
+
+# Expose Grafana via LoadBalancer
+kubectl patch svc monitoring-grafana -n monitoring \
+  -p '{"spec": {"type": "LoadBalancer"}}'
+```
+
+**Required: ServiceMonitor for your apps**
+
+```yaml
+# infra/k8s/monitoring/servicemonitor.yaml
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: api-metrics
+  namespace: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: api
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 15s
+```
+
+**Option 3: Cloud Monitoring (Native GCP)**
+
+Dùng GCP native monitoring không cần Prometheus:
+
+```bash
+# GKE đã tự động gửi metrics vào Cloud Monitoring
+# Xem tại: https://console.cloud.google.com/monitoring
+
+# Để log aggregation
+gcloud logging sinks create system-vibe-logs \
+  bigquery.googleapis.com/projects/system-vibe/datasets/logs \
+  --log-filter='resource.type="k8s_container"'
+```
+
+**Recommendation:**
+
+| Use Case                         | Recommendation                            |
+| -------------------------------- | ----------------------------------------- |
+| Minimal setup                    | **Google Managed Prometheus**             |
+| Full control + custom dashboards | **Self-hosted Grafana + GMP data source** |
+| Simple, GCP-native               | **Cloud Monitoring only**                 |
+
+</details>
+
+<details>
+<summary>What is Google Managed Prometheus (GMP)?</summary>
+
+**Google Managed Prometheus (GMP)** is Google Cloud's fully-managed Prometheus service for GKE clusters.
+
+**What it is:**
+
+- Prometheus-compatible monitoring **without managing Prometheus servers**
+- Collects metrics from your GKE pods using OpenTelemetry collectors
+- Stores metrics in Google Cloud with auto-scaling storage
+- Query using familiar **PromQL** syntax
+
+**Architecture:**
+
+```
+┌─────────────────────────────────────────┐
+│           GKE Cluster                   │
+│                                         │
+│  ┌─────────────────────────────┐         │
+│  │  GMP Collectors (DaemonSet) │         │
+│  │  - Auto-scrape pods via     │         │
+│  │    ServiceMonitor resources │         │
+│  │  - Send to Google Cloud     │         │
+│  └─────────────────────────────┘         │
+│            ↑                            │
+│  ┌─────────┴─────────┐                   │
+│  │ Your Apps (Pods)  │                   │
+│  │ - API             │                   │
+│  │ - Worker          │                   │
+│  └───────────────────┘                   │
+└─────────────────────────────────────────┘
+                   │
+                   ▼
+┌─────────────────────────────────────────┐
+│      Google Cloud (Fully Managed)       │
+│                                         │
+│  ┌─────────────────────────────────┐    │
+│  │  Google Managed Prometheus      │    │
+│  │  - Storage: Auto-scaling        │    │
+│  │  - Retention: 15 days default   │    │
+│  │  - Query: PromQL compatible      │    │
+│  │  - No server to manage          │    │
+│  └─────────────────────────────────┘    │
+│                                         │
+│  ┌─────────────────────────────────┐    │
+│  │  Cloud Monitoring               │    │
+│  │  - Dashboards                   │    │
+│  │  - Alerting policies            │    │
+│  │  - SLO monitoring               │    │
+│  └─────────────────────────────────┘    │
+└─────────────────────────────────────────┘
+```
+
+**GMP vs Self-Hosted Prometheus:**
+
+| Feature               | Self-Hosted          | Google Managed Prometheus |
+| --------------------- | -------------------- | ------------------------- |
+| **Server management** | You run pods         | Google manages completely |
+| **Storage**           | Manual PVC sizing    | Auto-scaling              |
+| **Retention**         | Configure manually   | 15 days (configurable)    |
+| **Scaling**           | Manual replica count | Automatic                 |
+| **Backup**            | Self-managed         | Built-in                  |
+| **PromQL**            | ✅                   | ✅                        |
+| **Grafana support**   | ✅                   | ✅ (via data source)      |
+
+**Cost model:**
+
+- **Ingestion**: Per metric sample ingested (first 50M samples/month free)
+- **Storage**: Included in ingestion cost for 15 days
+- **Query**: No additional cost for queries
+
+**When to use GMP:**
+
+- ✅ Don't want to manage Prometheus infrastructure
+- ✅ Already using GKE and other Google Cloud services
+- ✅ Need Prometheus-style monitoring (PromQL, exporters)
+- ✅ Want integration with Cloud Monitoring
+
+**When NOT to use GMP:**
+
+- ❌ Need multi-cloud monitoring (not locked to GCP)
+- ❌ Require long retention without exporting
+- ❌ Want full control over Prometheus configuration
+
+</details>
+
+<details>
+<summary>Does GMP include Grafana?</summary>
+
+**No** - Google Managed Prometheus (GMP) is only the managed Prometheus service. It does **not** include Grafana.
+
+**Options for visualization with GMP:**
+
+| Option                          | Description                                     | Setup                                |
+| ------------------------------- | ----------------------------------------------- | ------------------------------------ |
+| **Self-hosted Grafana**         | Deploy Grafana on GKE, use GMP as data source   | Helm chart or manual deployment      |
+| **Google Managed Grafana**      | GCP-hosted Grafana (connects GMP automatically) | GCP Console (if available in region) |
+| **Cloud Monitoring Dashboards** | Native GCP dashboards using GMP metrics         | Console-based, no additional setup   |
+
+**Connecting Self-Hosted Grafana to GMP:**
+
+```yaml
+# Grafana data source configuration
+apiVersion: 1
+datasources:
+  - name: GMP
+    type: prometheus
+    url: https://monitoring.googleapis.com/v1/projects/PROJECT_ID/location/global/prometheus/api/v1/query
+    access: proxy
+    jsonData:
+      httpMethod: POST
+      manageAlerts: false
+      prometheusType: Prometheus
+      prometheusVersion: 2.40.0
+      cacheLevel: "High"
+      incrementalQuerying: true
+    secureJsonData:
+      httpHeaderValue1: "Bearer $__token"
+```
+
+**Recommended approach:**
+
+For most use cases:
+
+- **Development/Simple**: Use Cloud Monitoring dashboards (no extra setup)
+- **Production/Advanced**: Deploy self-hosted Grafana + connect GMP
+- **GCP-native**: Check if Google Managed Grafana available in your region
+
+</details>
+
+<details>
+<summary>What are Cloud Monitoring Dashboards?</summary>
+
+**Cloud Monitoring Dashboards** are Google Cloud's native visualization tool for metrics, built into the Google Cloud Console.
+
+**What it is:**
+
+- **Fully managed** dashboards in GCP (no deployment needed)
+- Visualizes metrics from GMP, Cloud Monitoring, and Logs
+- Drag-and-drop interface in [Google Cloud Console](https://console.cloud.google.com/monitoring/dashboards)
+- No infrastructure to manage
+
+**Example dashboard:**
+
+```
+┌─────────────────────────────────────────────┐
+│  Google Cloud Console → Monitoring         │
+│                                             │
+│  ┌─────────────────┐  ┌─────────────────┐  │
+│  │ CPU Usage       │  │ Memory Usage    │  │
+│  │ [=======   ]    │  │ [========  ]    │  │
+│  │ 70%             │  │ 80%             │  │
+│  └─────────────────┘  └─────────────────┘  │
+│                                             │
+│  ┌─────────────────────────────────────┐   │
+│  │ Request Latency (p99)               │   │
+│  │    ╱╲    ╱╲    ╱╲                  │   │
+│  │   ╱  ╲  ╱  ╲  ╱  ╲                 │   │
+│  │  ╱    ╲╱    ╲╱    ╲                │   │
+│  └─────────────────────────────────────┘   │
+│                                             │
+│  ┌─────────────────┐  ┌─────────────────┐  │
+│  │ Error Rate      │  │ Active Users    │  │
+│  │ 0.5%            │  │ 1,234           │  │
+│  └─────────────────┘  └─────────────────┘  │
+└─────────────────────────────────────────────┘
+```
+
+**Pros:**
+
+- ✅ **Zero setup** - already available in GCP
+- ✅ **Native integration** with GMP, Cloud SQL, GKE, Load Balancers
+- ✅ **Auto-scaling** storage and retention
+- ✅ **Built-in alerting** - create alerts directly from dashboards
+- ✅ **Shareable** - share with team or embed in docs
+- ✅ **Pre-built dashboards** for common GCP services
+
+**Cons:**
+
+- ❌ Less flexible than Grafana (fewer visualization options)
+- ❌ No community plugins or dashboards
+- ❌ GCP lock-in (can't export to other platforms)
+- ❌ Limited customization compared to Grafana
+
+**When to use:**
+
+| Scenario                         | Recommendation                  |
+| -------------------------------- | ------------------------------- |
+| Quick start, minimal setup       | **Cloud Monitoring Dashboards** |
+| Simple monitoring needs          | **Cloud Monitoring Dashboards** |
+| Advanced visualizations, plugins | **Grafana**                     |
+| Multi-cloud monitoring           | **Grafana**                     |
+| Custom business metrics          | **Grafana**                     |
+
+**Creating a dashboard:**
+
+1. Go to [Cloud Monitoring → Dashboards](https://console.cloud.google.com/monitoring/dashboards)
+2. Click "Create Dashboard"
+3. Add widgets (Line chart, Bar chart, Scorecard, etc.)
+4. Select metrics from GMP or Cloud Monitoring
+5. Save and share
 
 </details>

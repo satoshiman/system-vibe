@@ -734,7 +734,7 @@ curl http://localhost:3000/api/metrics
 
 After completing Phase 6:
 
-1. **Phase 7**: Implement webhook notifications
+1. **Phase 8**: Implement webhook notifications
 2. **Add alerts**: Configure alert rules in Prometheus
 3. **Log aggregation**: Add Loki for centralized logging
 4. **Distributed tracing**: Implement OpenTelemetry/Jaeger

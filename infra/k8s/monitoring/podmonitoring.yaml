@@ -1,0 +1,27 @@
+apiVersion: monitoring.googleapis.com/v1
+kind: PodMonitoring
+metadata:
+  name: api-metrics
+  namespace: system-vibe
+spec:
+  selector:
+    matchLabels:
+      app: api
+  endpoints:
+    - port: 3000
+      path: /metrics
+      interval: 15s
+---
+apiVersion: monitoring.googleapis.com/v1
+kind: PodMonitoring
+metadata:
+  name: worker-metrics
+  namespace: system-vibe
+spec:
+  selector:
+    matchLabels:
+      app: worker-image
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 15s

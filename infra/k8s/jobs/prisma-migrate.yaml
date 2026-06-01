@@ -1,0 +1,36 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: prisma-migrate-v2
+  namespace: system-vibe
+spec:
+  ttlSecondsAfterFinished: 3600
+  backoffLimit: 5
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: asia-southeast1-docker.pkg.dev/system-vibe/system-vibe/api:v4
+          command:
+            - sh
+            - -c
+            - |
+              echo "Waiting for Cloud SQL Proxy..."
+              until nc -z localhost 5432; do
+                sleep 2
+              done
+              echo "Cloud SQL Proxy ready, running migration..."
+              npx prisma migrate deploy --schema=packages/database/prisma/schema.prisma
+              echo "Migration complete, stopping Cloud SQL Proxy..."
+              pkill cloud-sql-proxy || true
+          envFrom:
+            - secretRef:
+                name: system-vibe-secrets
+
+        - name: cloud-sql-proxy
+          image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2
+          args:
+            - "--structured-logs"
+            - "--port=5432"
+            - "system-vibe:asia-southeast1:system-vibe-db"

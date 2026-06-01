@@ -1,0 +1,39 @@
+notificationChannels:
+  - displayName: "SystemVibe Email Alerts"
+    type: email
+    labels:
+      email_address: "admin@systemvibe.com"
+
+alertingPolicies:
+  - displayName: "High API Latency"
+    combiner: OR
+    conditions:
+      - displayName: "API p99 latency > 500ms"
+        conditionThreshold:
+          filter: >
+            resource.type="prometheus_target"
+            AND metric.type="prometheus.googleapis.com/http_request_duration_seconds/histogram"
+          aggregations:
+            - alignmentPeriod: 300s
+              perSeriesAligner: ALIGN_PERCENTILE_99
+          comparison: COMPARISON_GT
+          thresholdValue: 0.5
+          duration: 300s
+          trigger:
+            count: 1
+
+  - displayName: "High Error Rate"
+    combiner: OR
+    conditions:
+      - displayName: "Error rate > 5%"
+        conditionThreshold:
+          filter: >
+            resource.type="prometheus_target"
+            AND metric.type="prometheus.googleapis.com/http_requests_total/counter"
+            AND metric.labels.status=~"5.*"
+          aggregations:
+            - alignmentPeriod: 300s
+              perSeriesAligner: ALIGN_RATE
+          comparison: COMPARISON_GT
+          thresholdValue: 0.05
+          duration: 300s

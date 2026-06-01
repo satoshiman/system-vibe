@@ -1,0 +1,77 @@
+{
+  "displayName": "SystemVibe Dashboard",
+  "gridLayout": {
+    "columns": "2",
+    "widgets": [
+      {
+        "title": "API Request Rate",
+        "xyChart": {
+          "dataSets": [
+            {
+              "timeSeriesQuery": {
+                "prometheusQuery": "rate(http_requests_total[5m])",
+                "unitOverride": "1/s"
+              }
+            }
+          ],
+          "timeshiftDuration": "0s",
+          "yAxis": {
+            "label": "Requests/sec",
+            "scale": "LINEAR"
+          }
+        }
+      },
+      {
+        "title": "API Response Time (p99)",
+        "xyChart": {
+          "dataSets": [
+            {
+              "timeSeriesQuery": {
+                "prometheusQuery": "histogram_quantile(0.99, rate(http_request_duration_seconds_bucket[5m]))",
+                "unitOverride": "s"
+              }
+            }
+          ],
+          "yAxis": {
+            "label": "Seconds",
+            "scale": "LINEAR"
+          }
+        }
+      },
+      {
+        "title": "CPU Usage",
+        "xyChart": {
+          "dataSets": [
+            {
+              "timeSeriesQuery": {
+                "prometheusQuery": "container_cpu_usage_seconds_total{namespace=\"system-vibe\"}",
+                "unitOverride": "1"
+              }
+            }
+          ],
+          "yAxis": {
+            "label": "CPU cores",
+            "scale": "LINEAR"
+          }
+        }
+      },
+      {
+        "title": "Memory Usage",
+        "xyChart": {
+          "dataSets": [
+            {
+              "timeSeriesQuery": {
+                "prometheusQuery": "container_memory_working_set_bytes{namespace=\"system-vibe\"}",
+                "unitOverride": "By"
+              }
+            }
+          ],
+          "yAxis": {
+            "label": "Bytes",
+            "scale": "LINEAR"
+          }
+        }
+      }
+    ]
+  }
+}

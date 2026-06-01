@@ -166,15 +166,26 @@ system-vibe/
 │   │   └── package.json
 │   └── shared/              # Shared utilities
 ├── infra/
-│   └── docker/
-│       ├── docker-compose.yml
-│       └── nginx.conf
+│   ├── docker/              # Local Docker Compose
+│   │   ├── docker-compose.yml
+│   │   └── nginx.conf
+│   └── k8s/                 # Kubernetes manifests (GCP)
+│       ├── namespace.yaml
+│       ├── api/
+│       ├── worker/
+│       ├── jobs/
+│       └── monitoring/
 ├── docs/                    # Documentation
 │   └── implementation/      # Phase implementation guides
 │       ├── PHASE_1_GETTING_STARTED.md
 │       ├── PHASE_2_AUTHENTICATION.md
 │       ├── PHASE_3_JOB_QUEUE.md
-│       └── PHASE_4_WORKER.md
+│       ├── PHASE_4_WORKER.md
+│       ├── PHASE_5_REALTIME_UPDATES.md
+│       ├── PHASE_6_MONITORING.md
+│       ├── PHASE_7_GCP_K8S_MIGRATION.md
+│       ├── PHASE_8_WEBHOOK.md
+│       └── PHASE_9_RATE_LIMITING.md
 ├── .env.example             # Environment variables template
 └── package.json             # Root package.json
 ```
@@ -896,6 +907,32 @@ docker compose down -v
 - [x] Worker job metrics via Redis Pub/Sub
 - [x] Queue depth monitoring
 - [x] Health check with queue and worker status
+
+### Phase 7: GCP + Kubernetes Migration ✅
+
+- [x] Docker Compose → GKE (Google Kubernetes Engine)
+- [x] PostgreSQL container → Cloud SQL (managed PostgreSQL)
+- [x] Redis container → Memorystore (managed Redis)
+- [x] Local Docker → Artifact Registry (image registry)
+- [x] Kubernetes manifests (Deployment, Service, HPA)
+- [x] Cloud SQL Auth Proxy (sidecar pattern)
+- [x] Google Managed Prometheus (GMP) + Cloud Monitoring
+- [x] Prisma migrations as K8s Jobs
+- [x] Workload Identity for GCP authentication
+
+### Phase 8: Webhook Notifications 🔄
+
+- [ ] Webhook delivery service
+- [ ] Retry with exponential backoff
+- [ ] Webhook signature verification
+- [ ] Delivery status tracking
+
+### Phase 9: Rate Limiting ⏳
+
+- [ ] Redis-based rate limiting
+- [ ] Token bucket algorithm
+- [ ] Per-user and global limits
+- [ ] Sliding window implementation
 
 ## Contributing
 

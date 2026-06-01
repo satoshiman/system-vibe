@@ -1,8 +1,8 @@
-# Phase 8: Rate Limiting
+# Phase 9: Rate Limiting
 
 ## Overview
 
-Phase 8 implements distributed rate limiting to protect the SystemVibe API from abuse. Uses Redis atomic operations for accurate counting across multiple API instances.
+Phase 9 implements distributed rate limiting to protect the SystemVibe API from abuse. Uses Redis atomic operations for accurate counting across multiple API instances.
 
 ## Goals
 
@@ -46,7 +46,7 @@ Phase 8 implements distributed rate limiting to protect the SystemVibe API from 
 
 ## Prerequisites
 
-- Phase 1-7 completed
+- Phase 1-8 completed
 - Redis running
 - Authentication system working (for user-based limits)
 - API server running
@@ -64,9 +64,9 @@ npm install --workspace=apps/api @nestjs/throttler
 Create `apps/api/src/modules/rate-limit/rate-limit.service.ts`:
 
 ```typescript
-import { Injectable, Logger } from '@nestjs/common';
-import getRedisClient from '@systemvibe/redis';
-import { Redis } from 'ioredis';
+import { Injectable, Logger } from "@nestjs/common";
+import getRedisClient from "@systemvibe/redis";
+import { Redis } from "ioredis";
 
 interface RateLimitConfig {
   windowMs: number;
@@ -95,17 +95,18 @@ export class RateLimitService {
 
   async checkUserLimit(
     userId: string,
-    jobType: string
+    jobType: string,
   ): Promise<{ allowed: boolean; remaining: number; resetTime: number }> {
     const key = `rate_limit:user:${userId}:${jobType}`;
-    const config = this.limits.user[jobType as keyof typeof this.limits.user] 
-      || this.limits.user.default;
+    const config =
+      this.limits.user[jobType as keyof typeof this.limits.user] ||
+      this.limits.user.default;
 
     return this.checkLimit(key, config);
   }
 
   async checkIpLimit(
-    ip: string
+    ip: string,
   ): Promise<{ allowed: boolean; remaining: number; resetTime: number }> {
     const key = `rate_limit:ip:${ip}`;
     const config = this.limits.ip.default;
@@ -115,7 +116,7 @@ export class RateLimitService {
 
   private async checkLimit(
     key: string,
-    config: RateLimitConfig
+    config: RateLimitConfig,
   ): Promise<{ allowed: boolean; remaining: number; resetTime: number }> {
     const now = Date.now();
     const windowSeconds = Math.ceil(config.windowMs / 1000);
@@ -135,20 +136,23 @@ export class RateLimitService {
     const remaining = Math.max(0, config.maxRequests - current);
     const allowed = current <= config.maxRequests;
 
-    this.logger.debug(`Rate limit check: ${key} = ${current}/${config.maxRequests}`);
+    this.logger.debug(
+      `Rate limit check: ${key} = ${current}/${config.maxRequests}`,
+    );
 
     return { allowed, remaining, resetTime };
   }
 
   async getLimitStatus(
     userId: string,
-    jobType: string
+    jobType: string,
   ): Promise<{ limit: number; current: number; windowMs: number }> {
     const key = `rate_limit:user:${userId}:${jobType}`;
-    const config = this.limits.user[jobType as keyof typeof this.limits.user] 
-      || this.limits.user.default;
+    const config =
+      this.limits.user[jobType as keyof typeof this.limits.user] ||
+      this.limits.user.default;
 
-    const current = parseInt((await this.redis.get(key)) || '0', 10);
+    const current = parseInt((await this.redis.get(key)) || "0", 10);
 
     return {
       limit: config.maxRequests,
@@ -171,8 +175,8 @@ import {
   HttpException,
   HttpStatus,
   Logger,
-} from '@nestjs/common';
-import { RateLimitService } from './rate-limit.service';
+} from "@nestjs/common";
+import { RateLimitService } from "./rate-limit.service";
 
 @Injectable()
 export class RateLimitGuard implements CanActivate {
@@ -183,11 +187,11 @@ export class RateLimitGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
     const response = context.switchToHttp().getResponse();
-    
+
     // Get user ID from request (set by auth guard)
     const userId = request.user?.id;
-    const jobType = request.body?.type || 'default';
-    
+    const jobType = request.body?.type || "default";
+
     // Get client IP
     const ip = this.getClientIp(request);
 
@@ -202,17 +206,23 @@ export class RateLimitGuard implements CanActivate {
     }
 
     // Set rate limit headers
-    response.setHeader('X-RateLimit-Limit', this.getLimitValue(userId, jobType));
-    response.setHeader('X-RateLimit-Remaining', limitResult.remaining);
-    response.setHeader('X-RateLimit-Reset', new Date(limitResult.resetTime).toISOString());
+    response.setHeader(
+      "X-RateLimit-Limit",
+      this.getLimitValue(userId, jobType),
+    );
+    response.setHeader("X-RateLimit-Remaining", limitResult.remaining);
+    response.setHeader(
+      "X-RateLimit-Reset",
+      new Date(limitResult.resetTime).toISOString(),
+    );
 
     if (!limitResult.allowed) {
       this.logger.warn(`Rate limit exceeded: ${userId || ip}`);
       throw new HttpException(
         {
           statusCode: HttpStatus.TOO_MANY_REQUESTS,
-          message: 'Rate limit exceeded. Please try again later.',
-          error: 'Too Many Requests',
+          message: "Rate limit exceeded. Please try again later.",
+          error: "Too Many Requests",
           retryAfter: Math.ceil((limitResult.resetTime - Date.now()) / 1000),
         },
         HttpStatus.TOO_MANY_REQUESTS,
@@ -224,18 +234,18 @@ export class RateLimitGuard implements CanActivate {
 
   private getClientIp(request: any): string {
     return (
-      request.headers['x-forwarded-for']?.split(',')[0] ||
-      request.headers['x-real-ip'] ||
+      request.headers["x-forwarded-for"]?.split(",")[0] ||
+      request.headers["x-real-ip"] ||
       request.connection.remoteAddress ||
       request.ip ||
-      'unknown'
+      "unknown"
     );
   }
 
   private getLimitValue(userId: string | undefined, jobType: string): number {
     // Return appropriate limit based on user/IP and job type
     if (userId) {
-      return jobType === 'image' ? 100 : 100; // 100 jobs/hour for users
+      return jobType === "image" ? 100 : 100; // 100 jobs/hour for users
     }
     return 10; // 10 requests/minute for IPs
   }
@@ -247,9 +257,9 @@ export class RateLimitGuard implements CanActivate {
 Create `apps/api/src/modules/rate-limit/rate-limit.module.ts`:
 
 ```typescript
-import { Module } from '@nestjs/common';
-import { RateLimitService } from './rate-limit.service';
-import { RateLimitGuard } from './rate-limit.guard';
+import { Module } from "@nestjs/common";
+import { RateLimitService } from "./rate-limit.service";
+import { RateLimitGuard } from "./rate-limit.guard";
 
 @Module({
   providers: [RateLimitService, RateLimitGuard],
@@ -272,24 +282,33 @@ import {
   Delete,
   Query,
   UseGuards,
-} from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
-import { JobsService } from './jobs.service';
-import { CreateJobDto } from './dto/create-job.dto';
-import { JobResponseDto } from './dto/job-response.dto';
-import { FilterJobsDto } from './dto/filter-jobs.dto';
-import { RateLimitGuard } from '../rate-limit/rate-limit.guard';
+} from "@nestjs/common";
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+} from "@nestjs/swagger";
+import { JobsService } from "./jobs.service";
+import { CreateJobDto } from "./dto/create-job.dto";
+import { JobResponseDto } from "./dto/job-response.dto";
+import { FilterJobsDto } from "./dto/filter-jobs.dto";
+import { RateLimitGuard } from "../rate-limit/rate-limit.guard";
 
-@ApiTags('jobs')
-@Controller('jobs')
+@ApiTags("jobs")
+@Controller("jobs")
 export class JobsController {
   constructor(private readonly jobsService: JobsService) {}
 
   @Post()
-  @UseGuards(RateLimitGuard)  // Apply rate limiting
-  @ApiOperation({ summary: 'Create a new job' })
-  @ApiResponse({ status: 201, description: 'Job created', type: JobResponseDto })
-  @ApiResponse({ status: 429, description: 'Rate limit exceeded' })
+  @UseGuards(RateLimitGuard) // Apply rate limiting
+  @ApiOperation({ summary: "Create a new job" })
+  @ApiResponse({
+    status: 201,
+    description: "Job created",
+    type: JobResponseDto,
+  })
+  @ApiResponse({ status: 429, description: "Rate limit exceeded" })
   async create(@Body() createJobDto: CreateJobDto): Promise<JobResponseDto> {
     return this.jobsService.create(createJobDto);
   }
@@ -303,16 +322,16 @@ export class JobsController {
 Update `apps/api/src/app.module.ts`:
 
 ```typescript
-import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
-import { HealthModule } from './modules/health/health.module';
-import { AuthModule } from './modules/auth/auth.module';
-import { JobsModule } from './modules/jobs/jobs.module';
-import { WebsocketModule } from './modules/websocket/websocket.module';
-import { MetricsModule } from './modules/metrics/metrics.module';
-import { WebhookModule } from './modules/webhook/webhook.module';
-import { RateLimitModule } from './modules/rate-limit/rate-limit.module';
-import queueConfig from './config/queue.config';
+import { Module } from "@nestjs/common";
+import { ConfigModule } from "@nestjs/config";
+import { HealthModule } from "./modules/health/health.module";
+import { AuthModule } from "./modules/auth/auth.module";
+import { JobsModule } from "./modules/jobs/jobs.module";
+import { WebsocketModule } from "./modules/websocket/websocket.module";
+import { MetricsModule } from "./modules/metrics/metrics.module";
+import { WebhookModule } from "./modules/webhook/webhook.module";
+import { RateLimitModule } from "./modules/rate-limit/rate-limit.module";
+import queueConfig from "./config/queue.config";
 
 @Module({
   imports: [
@@ -337,9 +356,9 @@ export class AppModule {}
 Add to `apps/api/src/modules/jobs/jobs.controller.ts`:
 
 ```typescript
-import { RateLimitService } from '../rate-limit/rate-limit.service';
+import { RateLimitService } from "../rate-limit/rate-limit.service";
 
-@Controller('jobs')
+@Controller("jobs")
 export class JobsController {
   constructor(
     private readonly jobsService: JobsService,
@@ -348,25 +367,25 @@ export class JobsController {
 
   // ... existing methods ...
 
-  @Get('rate-limit/status')
-  @ApiOperation({ summary: 'Get current rate limit status' })
-  @ApiResponse({ status: 200, description: 'Rate limit status' })
+  @Get("rate-limit/status")
+  @ApiOperation({ summary: "Get current rate limit status" })
+  @ApiResponse({ status: 200, description: "Rate limit status" })
   async getRateLimitStatus(@Req() req): Promise<any> {
     const userId = req.user?.id;
-    
+
     if (!userId) {
       return {
-        type: 'ip',
+        type: "ip",
         limit: 10,
-        window: '1 minute',
+        window: "1 minute",
       };
     }
 
-    const status = await this.rateLimitService.getLimitStatus(userId, 'image');
-    
+    const status = await this.rateLimitService.getLimitStatus(userId, "image");
+
     return {
-      type: 'user',
-      jobType: 'image',
+      type: "user",
+      jobType: "image",
       limit: status.limit,
       current: status.current,
       remaining: Math.max(0, status.limit - status.current),
@@ -380,11 +399,11 @@ export class JobsController {
 
 ### Default Limits
 
-| Type | Target | Limit | Window |
-|------|--------|-------|--------|
-| User | image jobs | 100 | per hour |
-| User | other jobs | 100 | per hour |
-| IP | all requests | 10 | per minute |
+| Type | Target       | Limit | Window     |
+| ---- | ------------ | ----- | ---------- |
+| User | image jobs   | 100   | per hour   |
+| User | other jobs   | 100   | per hour   |
+| IP   | all requests | 10    | per minute |
 
 ### Redis Keys
 
@@ -395,11 +414,11 @@ rate_limit:ip:{ipAddress}            → counter with TTL
 
 ### Response Headers
 
-| Header | Description |
-|--------|-------------|
-| `X-RateLimit-Limit` | Maximum requests allowed |
-| `X-RateLimit-Remaining` | Requests remaining in window |
-| `X-RateLimit-Reset` | ISO timestamp when limit resets |
+| Header                  | Description                     |
+| ----------------------- | ------------------------------- |
+| `X-RateLimit-Limit`     | Maximum requests allowed        |
+| `X-RateLimit-Remaining` | Requests remaining in window    |
+| `X-RateLimit-Reset`     | ISO timestamp when limit resets |
 
 ### 429 Response
 
@@ -454,6 +473,7 @@ curl http://localhost:3000/api/jobs/rate-limit/status \
 ```
 
 Expected response:
+
 ```json
 {
   "type": "user",
@@ -519,21 +539,21 @@ async checkTokenBucket(
 ): Promise<boolean> {
   const now = Date.now();
   const bucket = await this.redis.hmget(key, 'tokens', 'lastRefill');
-  
+
   let tokens = parseFloat(bucket[0] || capacity);
   const lastRefill = parseInt(bucket[1] || '0', 10);
-  
+
   // Refill tokens
   const timePassed = now - lastRefill;
   tokens = Math.min(capacity, tokens + timePassed * refillRate);
-  
+
   if (tokens < 1) {
     return false;
   }
-  
+
   tokens -= 1;
   await this.redis.hmset(key, 'tokens', tokens, 'lastRefill', now);
-  
+
   return true;
 }
 ```
@@ -552,7 +572,7 @@ If behind a proxy, ensure `X-Forwarded-For` header is trusted:
 
 ```typescript
 // In main.ts
-app.set('trust proxy', 1);
+app.set("trust proxy", 1);
 ```
 
 ### Redis Memory Growth

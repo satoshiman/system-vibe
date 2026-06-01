@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker-image
+  namespace: system-vibe
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: worker-image
+  template:
+    metadata:
+      labels:
+        app: worker-image
+    spec:
+      containers:
+        - name: worker
+          image: asia-southeast1-docker.pkg.dev/system-vibe/system-vibe/worker:v7
+          envFrom:
+            - secretRef:
+                name: system-vibe-secrets
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "2000m"
+              memory: "1Gi"
+
+        - name: cloud-sql-proxy
+          image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2
+          args:
+            - "--structured-logs"
+            - "--port=5432"
+            - "system-vibe:asia-southeast1:system-vibe-db"
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"

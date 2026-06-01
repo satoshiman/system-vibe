@@ -1,8 +1,8 @@
-# Phase 7: Webhook Notifications
+# Phase 8: Webhook Notifications
 
 ## Overview
 
-Phase 7 implements a reliable webhook notification system that notifies external systems when jobs complete. Includes retry logic, HMAC signature verification, and delivery tracking.
+Phase 8 implements a reliable webhook notification system that notifies external systems when jobs complete. Includes retry logic, HMAC signature verification, and delivery tracking.
 
 ## Goals
 
@@ -79,7 +79,7 @@ Ensure `webhookUrl` field exists in schema. Update `packages/database/prisma/sch
 ```prisma
 model Job {
   // ... existing fields ...
-  
+
   webhookUrl        String?
   webhookDeliveredAt DateTime?
   webhookRetryCount  Int       @default(0)
@@ -99,15 +99,15 @@ npx prisma migrate dev --name add_webhook_fields
 Create `apps/api/src/modules/webhook/webhook.service.ts`:
 
 ```typescript
-import { Injectable, Logger } from '@nestjs/common';
-import { PrismaService } from '@systemvibe/database';
-import crypto from 'crypto';
-import axios, { AxiosError } from 'axios';
+import { Injectable, Logger } from "@nestjs/common";
+import { PrismaService } from "@systemvibe/database";
+import crypto from "crypto";
+import axios, { AxiosError } from "axios";
 
 interface WebhookPayload {
   jobId: string;
   type: string;
-  status: 'COMPLETED' | 'FAILED';
+  status: "COMPLETED" | "FAILED";
   result?: any;
   error?: string;
   timestamp: string;
@@ -121,7 +121,7 @@ export class WebhookService {
   private readonly retryDelays = [5000, 15000, 45000]; // 5s, 15s, 45s
 
   constructor(private prisma: PrismaService) {
-    this.webhookSecret = process.env.WEBHOOK_SECRET || 'default-secret';
+    this.webhookSecret = process.env.WEBHOOK_SECRET || "default-secret";
   }
 
   async sendWebhook(jobId: string, payload: WebhookPayload): Promise<void> {
@@ -135,7 +135,7 @@ export class WebhookService {
     }
 
     // Check if already delivered
-    if (job.webhookStatus === 'delivered') {
+    if (job.webhookStatus === "delivered") {
       this.logger.debug(`Webhook already delivered for job ${jobId}`);
       return;
     }
@@ -143,7 +143,7 @@ export class WebhookService {
     // Check retry limit
     if (job.webhookRetryCount >= this.maxRetries) {
       this.logger.warn(`Max retries reached for job ${jobId} webhook`);
-      await this.updateWebhookStatus(jobId, 'failed');
+      await this.updateWebhookStatus(jobId, "failed");
       return;
     }
 
@@ -152,24 +152,23 @@ export class WebhookService {
 
     try {
       this.logger.log(`Sending webhook for job ${jobId} to ${job.webhookUrl}`);
-      
+
       await axios.post(job.webhookUrl, payload, {
         headers: {
-          'Content-Type': 'application/json',
-          'X-Webhook-Signature': signature,
-          'X-Job-ID': jobId,
+          "Content-Type": "application/json",
+          "X-Webhook-Signature": signature,
+          "X-Job-ID": jobId,
         },
         timeout: 30000, // 30 second timeout
       });
 
       // Success - mark as delivered
-      await this.updateWebhookStatus(jobId, 'delivered');
+      await this.updateWebhookStatus(jobId, "delivered");
       this.logger.log(`Webhook delivered successfully for job ${jobId}`);
-
     } catch (error) {
       const axiosError = error as AxiosError;
       this.logger.error(
-        `Webhook delivery failed for job ${jobId}: ${axiosError.message}`
+        `Webhook delivery failed for job ${jobId}: ${axiosError.message}`,
       );
 
       // Schedule retry
@@ -177,12 +176,12 @@ export class WebhookService {
       if (nextRetry < this.maxRetries) {
         const delay = this.retryDelays[nextRetry];
         this.logger.log(`Scheduling retry ${nextRetry} in ${delay}ms`);
-        
+
         setTimeout(() => {
           this.sendWebhook(jobId, payload);
         }, delay);
       } else {
-        await this.updateWebhookStatus(jobId, 'failed');
+        await this.updateWebhookStatus(jobId, "failed");
       }
     }
   }
@@ -190,20 +189,20 @@ export class WebhookService {
   private signPayload(payload: WebhookPayload): string {
     const payloadString = JSON.stringify(payload);
     return crypto
-      .createHmac('sha256', this.webhookSecret)
+      .createHmac("sha256", this.webhookSecret)
       .update(payloadString)
-      .digest('hex');
+      .digest("hex");
   }
 
   private async updateWebhookStatus(
     jobId: string,
-    status: 'delivered' | 'failed'
+    status: "delivered" | "failed",
   ): Promise<void> {
     await this.prisma.job.update({
       where: { id: jobId },
       data: {
         webhookStatus: status,
-        webhookDeliveredAt: status === 'delivered' ? new Date() : undefined,
+        webhookDeliveredAt: status === "delivered" ? new Date() : undefined,
       },
     });
   }
@@ -215,8 +214,8 @@ export class WebhookService {
 Create `apps/api/src/modules/webhook/webhook.module.ts`:
 
 ```typescript
-import { Module } from '@nestjs/common';
-import { WebhookService } from './webhook.service';
+import { Module } from "@nestjs/common";
+import { WebhookService } from "./webhook.service";
 
 @Module({
   providers: [WebhookService],
@@ -230,19 +229,19 @@ export class WebhookModule {}
 Update `apps/api/src/modules/websocket/pubsub.service.ts` to trigger webhooks:
 
 ```typescript
-import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
-import { Logger } from '@nestjs/common';
-import { JobsGateway } from './websocket.gateway';
-import { WebhookService } from '../webhook/webhook.service';
-import getRedisClient from '@systemvibe/redis';
-import { Redis } from 'ioredis';
+import { Injectable, OnModuleInit, OnModuleDestroy } from "@nestjs/common";
+import { Logger } from "@nestjs/common";
+import { JobsGateway } from "./websocket.gateway";
+import { WebhookService } from "../webhook/webhook.service";
+import getRedisClient from "@systemvibe/redis";
+import { Redis } from "ioredis";
 
 @Injectable()
 export class PubSubService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PubSubService.name);
   private redis: Redis;
   private subscriber: Redis;
-  private channels = ['job:status', 'job:progress'];
+  private channels = ["job:status", "job:progress"];
 
   constructor(
     private jobsGateway: JobsGateway,
@@ -258,7 +257,7 @@ export class PubSubService implements OnModuleInit, OnModuleDestroy {
     this.logger.log(
       `Received job status event: ${event.jobId} - ${event.status}`,
     );
-    
+
     // Broadcast to WebSocket clients
     this.jobsGateway.broadcastJobStatus(event.jobId, {
       status: event.status,
@@ -267,11 +266,11 @@ export class PubSubService implements OnModuleInit, OnModuleDestroy {
     });
 
     // Send webhook for terminal states
-    if (event.status === 'COMPLETED' || event.status === 'FAILED') {
+    if (event.status === "COMPLETED" || event.status === "FAILED") {
       this.webhookService.sendWebhook(event.jobId, {
         jobId: event.jobId,
-        type: 'image-resize', // Get from job data
-        status: event.status as 'COMPLETED' | 'FAILED',
+        type: "image-resize", // Get from job data
+        status: event.status as "COMPLETED" | "FAILED",
         result: event.result,
         error: event.error,
         timestamp: new Date().toISOString(),
@@ -292,8 +291,8 @@ export class CreateJobDto {
   // ... existing fields ...
 
   @ApiProperty({
-    description: 'Webhook URL to notify on completion',
-    example: 'https://example.com/webhook',
+    description: "Webhook URL to notify on completion",
+    example: "https://example.com/webhook",
     required: false,
   })
   @IsOptional()
@@ -320,7 +319,7 @@ async create(createJobDto: CreateJobDto): Promise<JobResponseDto> {
       status: 'PENDING',
     },
   });
-  
+
   // ... rest of create logic ...
 }
 ```
@@ -330,15 +329,15 @@ async create(createJobDto: CreateJobDto): Promise<JobResponseDto> {
 Update `apps/api/src/app.module.ts`:
 
 ```typescript
-import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
-import { HealthModule } from './modules/health/health.module';
-import { AuthModule } from './modules/auth/auth.module';
-import { JobsModule } from './modules/jobs/jobs.module';
-import { WebsocketModule } from './modules/websocket/websocket.module';
-import { MetricsModule } from './modules/metrics/metrics.module';
-import { WebhookModule } from './modules/webhook/webhook.module';
-import queueConfig from './config/queue.config';
+import { Module } from "@nestjs/common";
+import { ConfigModule } from "@nestjs/config";
+import { HealthModule } from "./modules/health/health.module";
+import { AuthModule } from "./modules/auth/auth.module";
+import { JobsModule } from "./modules/jobs/jobs.module";
+import { WebsocketModule } from "./modules/websocket/websocket.module";
+import { MetricsModule } from "./modules/metrics/metrics.module";
+import { WebhookModule } from "./modules/webhook/webhook.module";
+import queueConfig from "./config/queue.config";
 
 @Module({
   imports: [
@@ -398,43 +397,47 @@ For failed jobs:
 
 ## Headers
 
-| Header | Description |
-|--------|-------------|
-| `Content-Type` | `application/json` |
+| Header                | Description                      |
+| --------------------- | -------------------------------- |
+| `Content-Type`        | `application/json`               |
 | `X-Webhook-Signature` | HMAC-SHA256 signature of payload |
-| `X-Job-ID` | Job UUID |
+| `X-Job-ID`            | Job UUID                         |
 
 ## Verifying Webhook Signature
 
 Clients should verify the HMAC signature:
 
 ```typescript
-import crypto from 'crypto';
+import crypto from "crypto";
 
-function verifyWebhook(payload: string, signature: string, secret: string): boolean {
+function verifyWebhook(
+  payload: string,
+  signature: string,
+  secret: string,
+): boolean {
   const expectedSignature = crypto
-    .createHmac('sha256', secret)
+    .createHmac("sha256", secret)
     .update(payload)
-    .digest('hex');
-  
+    .digest("hex");
+
   return crypto.timingSafeEqual(
     Buffer.from(signature),
-    Buffer.from(expectedSignature)
+    Buffer.from(expectedSignature),
   );
 }
 
 // Express example
-app.post('/webhook', (req, res) => {
-  const signature = req.headers['x-webhook-signature'];
+app.post("/webhook", (req, res) => {
+  const signature = req.headers["x-webhook-signature"];
   const payload = JSON.stringify(req.body);
-  
+
   if (!verifyWebhook(payload, signature, WEBHOOK_SECRET)) {
-    return res.status(401).send('Invalid signature');
+    return res.status(401).send("Invalid signature");
   }
-  
+
   // Process webhook
-  console.log('Job completed:', req.body.jobId);
-  res.status(200).send('OK');
+  console.log("Job completed:", req.body.jobId);
+  res.status(200).send("OK");
 });
 ```
 
@@ -457,13 +460,13 @@ const server = http.createServer((req, res) => {
     req.on('data', chunk => body += chunk);
     req.on('end', () => {
       const signature = req.headers['x-webhook-signature'];
-      
+
       // Verify signature
       const expected = crypto
         .createHmac('sha256', WEBHOOK_SECRET)
         .update(body)
         .digest('hex');
-      
+
       if (signature === expected) {
         console.log('✓ Webhook received:', JSON.parse(body));
         res.writeHead(200);
@@ -481,6 +484,7 @@ server.listen(4000, () => console.log('Webhook test server on port 4000'));
 ```
 
 Run:
+
 ```bash
 node test-webhook-server.js
 ```
@@ -512,12 +516,12 @@ docker exec -it systemvibe-postgres psql -U systemvibe -d systemvibe -c \
 
 ## Retry Behavior
 
-| Attempt | Delay | Action on Failure |
-|---------|-------|-------------------|
-| 1 | Immediate | Wait 5 seconds |
-| 2 | 5 seconds | Wait 15 seconds |
-| 3 | 15 seconds | Wait 45 seconds |
-| 4 | 45 seconds | Mark as failed |
+| Attempt | Delay      | Action on Failure |
+| ------- | ---------- | ----------------- |
+| 1       | Immediate  | Wait 5 seconds    |
+| 2       | 5 seconds  | Wait 15 seconds   |
+| 3       | 15 seconds | Wait 45 seconds   |
+| 4       | 45 seconds | Mark as failed    |
 
 ## Troubleshooting
 
