@@ -1874,6 +1874,61 @@ DATABASE_REPLICA_URL: z.string().url().optional(), // Replica (reads)
 </details>
 
 <details>
+<summary>Does adding DB replicas increase read and write capacity?</summary>
+
+**No** - it depends on the type of replica:
+
+| Replica Type              | Read   | Write | Purpose                            |
+| ------------------------- | ------ | ----- | ---------------------------------- |
+| **HA Standby** (Regional) | ❌ No  | ❌ No | Failover only when primary is down |
+| **Read Replica**          | ✅ Yes | ❌ No | Distribute read load only          |
+
+**Architecture:**
+
+```
+┌─────────────────────────────────────────┐
+│        Cloud SQL Primary                │
+│        (Read + Write)                   │
+│         34.126.86.151                   │
+└─────────────────────────────────────────┘
+        │
+        ├── Write operations (INSERT/UPDATE/DELETE)
+        └── Read operations (SELECT)
+
+┌─────────────────────────────────────────┐
+│        HA Standby (Regional)            │
+│        ❌ Doesn't handle requests         │
+│        Waits for failover               │
+└─────────────────────────────────────────┘
+
+┌─────────────────────────────────────────┐
+│        Read Replica 1                   │
+│        ✅ Read only (SELECT)            │
+│        ❌ No Write                      │
+└─────────────────────────────────────────┘
+```
+
+**Key Points:**
+
+- **Enable HA (Regional)**: Doesn't increase performance, only increases availability (99.95% uptime SLA)
+- **Add Read Replicas**: Increases **READ** capacity (scalability), but **WRITE** still only on primary
+
+**To increase BOTH read and write:**
+
+1. **Scale up primary tier** (db-f1-micro → db-g1-small → db-n1-standard-2)
+2. **Implement database sharding** (split data across multiple databases)
+3. **Optimize queries** and add proper indexes
+4. **Use caching** (Redis) to reduce database load
+
+**Rule of thumb:**
+
+- Read-heavy workload (10:1 ratio) → Add read replicas
+- Write-heavy workload → Scale up primary tier
+- Need high availability → Enable HA
+
+</details>
+
+<details>
 <summary>What about Prometheus and Grafana in production?</summary>
 
 **Current Status:**
