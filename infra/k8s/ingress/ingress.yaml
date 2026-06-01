@@ -14,7 +14,7 @@ metadata:
     kubernetes.io/ingress.allow-http: "false"
 spec:
   rules:
-    - host: api.systemvibe.com  # Replace with your domain
+    - host: systemvibe.kudos.games # Your domain
       http:
         paths:
           - path: /
