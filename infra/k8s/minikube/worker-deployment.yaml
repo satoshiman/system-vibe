@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker-image
+  namespace: system-vibe
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: worker-image
+  template:
+    metadata:
+      labels:
+        app: worker-image
+    spec:
+      containers:
+        - name: worker
+          image: system-vibe-worker:latest
+          imagePullPolicy: Never
+          envFrom:
+            - secretRef:
+                name: system-vibe-secrets
+          env:
+            - name: DATABASE_URL
+              value: "postgresql://$(DB_USER):$(DB_PASSWORD)@postgres:5432/$(DB_NAME)"
+            - name: REDIS_URL
+              value: "redis://redis:6379"
+            - name: REDIS_HOST
+              value: "redis"
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "2000m"
+              memory: "1Gi"

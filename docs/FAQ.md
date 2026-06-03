@@ -2,8 +2,10 @@
 
 ## Architecture & Design Decisions
 
+### Why organize Redis as a separate package?
+
 <details>
-<summary>Why organize Redis as a separate package?</summary>
+<summary>Answer</summary>
 
 Organizing Redis as a separate package (`@systemvibe/redis`) in the monorepo provides the following benefits:
 
@@ -42,8 +44,10 @@ In monorepo architecture, this pattern is typically applied to shared services: 
 
 </details>
 
+### Where should JWT be stored: localStorage or Cookie?
+
 <details>
-<summary>Where should JWT be stored: localStorage or Cookie?</summary>
+<summary>Answer</summary>
 
 For SystemVibe, JWT should be stored in **HttpOnly Cookies** rather than localStorage.
 
@@ -75,8 +79,10 @@ For SystemVibe, JWT should be stored in **HttpOnly Cookies** rather than localSt
 
 </details>
 
+### What is the difference between Worker and Webhook? When to use each?
+
 <details>
-<summary>What is the difference between Worker and Webhook? When to use each?</summary>
+<summary>Answer</summary>
 
 When designing a distributed system like SystemVibe, classifying a background task as **Worker** or **Webhook Delivery Service** depends on answering: **"Where does the output go and who controls the receiving infrastructure?"**
 
@@ -132,8 +138,10 @@ Look at the last line of your background task code:
 
 </details>
 
+### What is the difference between Redis Commander and RedisInsight?
+
 <details>
-<summary>What is the difference between Redis Commander and RedisInsight?</summary>
+<summary>Answer</summary>
 
 Both Redis Commander and RedisInsight are GUI tools for inspecting Redis data, but they have different characteristics:
 
@@ -168,8 +176,10 @@ docker compose up -d redis-commander
 
 </details>
 
+### How to debug Redis in SystemVibe?
+
 <details>
-<summary>How to debug Redis in SystemVibe?</summary>
+<summary>Answer</summary>
 
 **1. Redis CLI (Quickest)**
 
@@ -277,8 +287,10 @@ docker exec systemvibe-redis redis-cli ping
 
 </details>
 
+### When is refresh token rotation triggered from the client?
+
 <details>
-<summary>When is refresh token rotation triggered from the client?</summary>
+<summary>Answer</summary>
 
 Refresh token rotation is triggered from the client in the following scenarios:
 
@@ -310,8 +322,10 @@ Refresh token rotation is triggered from the client in the following scenarios:
 
 ## Redis & Queue
 
+### What are all the Redis keys in SystemVibe?
+
 <details>
-<summary>What are all the Redis keys in SystemVibe?</summary>
+<summary>Answer</summary>
 
 SystemVibe uses Redis for multiple purposes. Here's a breakdown of all the keys you'll see in Redis Commander:
 
@@ -366,8 +380,10 @@ Redis Keys Structure in SystemVibe
 
 </details>
 
+### Do completed jobs get automatically deleted from Redis?
+
 <details>
-<summary>Do completed jobs get automatically deleted from Redis?</summary>
+<summary>Answer</summary>
 
 Completed jobs in Redis with BullMQ **do not automatically delete** by default. They remain in Redis until explicitly removed or configured with a TTL (Time To Live).
 
@@ -422,8 +438,10 @@ When a job is deleted from Redis:
 
 </details>
 
+### What is the difference between PENDING and QUEUED job status?
+
 <details>
-<summary>What is the difference between PENDING and QUEUED job status?</summary>
+<summary>Answer</summary>
 
 In SystemVibe's job queue system, PENDING and QUEUED represent different stages of the job lifecycle:
 
@@ -461,8 +479,10 @@ PENDING (create in DB) → QUEUED (add to BullMQ) → PROCESSING (worker picks u
 
 </details>
 
+### How does job priority work in BullMQ?
+
 <details>
-<summary>How does job priority work in BullMQ?</summary>
+<summary>Answer</summary>
 
 In SystemVibe, job priority determines the order in which jobs are processed by workers.
 
@@ -510,8 +530,10 @@ In SystemVibe, job priority determines the order in which jobs are processed by 
 
 </details>
 
+### What happens when Redis is restarted in SystemVibe?
+
 <details>
-<summary>What happens when Redis is restarted in SystemVibe?</summary>
+<summary>Answer</summary>
 
 With the current setup in `docker-compose.yml`, Redis is configured with AOF persistence:
 
@@ -560,8 +582,10 @@ redis:
 
 </details>
 
+### How do BullMQ, Redis, and Workers work together?
+
 <details>
-<summary>How do BullMQ, Redis, and Workers work together?</summary>
+<summary>Answer</summary>
 
 BullMQ is a Redis-based queue system that enables asynchronous job processing. Here's how the components interact:
 
@@ -644,8 +668,10 @@ BullMQ is a Redis-based queue system that enables asynchronous job processing. H
 
 </details>
 
+### Is Pub/Sub typically used with WebSocket? What are other applications?
+
 <details>
-<summary>Is Pub/Sub typically used with WebSocket? What are other applications?</summary>
+<summary>Answer</summary>
 
 Pub/Sub is **not required** for WebSocket but is a common pattern in event-driven architectures.
 
@@ -736,8 +762,10 @@ Score update → Redis Pub/Sub → All connected clients
 
 ## Docker & Workers
 
+### Why does API service run locally (npm run dev) instead of Docker container?
+
 <details>
-<summary>Why does API service run locally (npm run dev) instead of Docker container?</summary>
+<summary>Answer</summary>
 
 In SystemVibe's development environment, the API service runs locally with `npm run dev` instead of in a Docker container. This is a deliberate development choice for the following reasons:
 
@@ -841,8 +869,10 @@ This development setup is specific to the SystemVibe project. Other projects may
 
 </details>
 
+### What does the Dockerfile in apps/worker-image do?
+
 <details>
-<summary>What does the Dockerfile in apps/worker-image do?</summary>
+<summary>Answer</summary>
 
 The Dockerfile in `apps/worker-image` is used to build and run the **image processing worker**. It performs the following steps:
 
@@ -857,8 +887,10 @@ This worker processes image jobs from the Redis queue (resize, optimize, convert
 
 </details>
 
+### How to scale the worker-image to multiple containers?
+
 <details>
-<summary>How to scale the worker-image to multiple containers?</summary>
+<summary>Answer</summary>
 
 There are three ways to scale the `worker-image` to multiple containers:
 
@@ -895,8 +927,10 @@ Use a Deployment with `replicas: 3` and HorizontalPodAutoscaler.
 
 </details>
 
+### What happens when scaling up or down workers?
+
 <details>
-<summary>What happens when scaling up or down workers?</summary>
+<summary>Answer</summary>
 
 **Scaling Up (Increasing Workers)**
 
@@ -955,8 +989,10 @@ BullMQ worker handles:
 
 </details>
 
+### What are the criteria for creating a worker? Why not use an API instead?
+
 <details>
-<summary>What are the criteria for creating a worker? Why not use an API instead?</summary>
+<summary>Answer</summary>
 
 **Criteria for Creating a Worker:**
 
@@ -1003,8 +1039,10 @@ Resizing a 100MB image:
 
 </details>
 
+### How does `pgrep -f node || exit 1` work as a Docker healthcheck?
+
 <details>
-<summary>How does `pgrep -f node || exit 1` work as a Docker healthcheck?</summary>
+<summary>Answer</summary>
 
 The command `pgrep -f node || exit 1` is used in docker-compose.yml to check if the worker-image container is healthy.
 
@@ -1042,8 +1080,10 @@ healthcheck:
 
 </details>
 
+### How does the health service check worker status?
+
 <details>
-<summary>How does the health service check worker status?</summary>
+<summary>Answer</summary>
 
 The health service in `apps/api/src/modules/health/health.service.ts` checks worker status using BullMQ's built-in worker detection mechanism.
 
@@ -1109,8 +1149,10 @@ try {
 
 </details>
 
+### What does the startHeartbeat() method do in the worker?
+
 <details>
-<summary>What does the startHeartbeat() method do in the worker?</summary>
+<summary>Answer</summary>
 
 The `startHeartbeat()` method in `apps/worker-image/src/image.processor.ts` sends periodic heartbeat signals to indicate the worker is still alive and operational.
 
@@ -1155,8 +1197,10 @@ The `startHeartbeat()` method in `apps/worker-image/src/image.processor.ts` send
 
 </details>
 
+### Does BullMQ use the custom heartbeat for job coordination?
+
 <details>
-<summary>Does BullMQ use the custom heartbeat for job coordination?</summary>
+<summary>Answer</summary>
 
 No, the custom heartbeat in `startHeartbeat()` is a **SystemVibe-specific implementation**, not part of BullMQ. BullMQ has its own separate worker registration mechanism.
 
@@ -1225,8 +1269,10 @@ BullMQ coordinates jobs using:
 
 ## Monitoring & Logging
 
+### What are P50 and P95?
+
 <details>
-<summary>What are P50 and P95?</summary>
+<summary>Answer</summary>
 
 P50 and P95 are **percentiles** (phân vị) in statistics, commonly used to measure system performance:
 
@@ -1263,8 +1309,10 @@ If P95 response time is 200ms:
 
 </details>
 
+### Why does `/api/metrics` return text format instead of JSON?
+
 <details>
-<summary>Why does `/api/metrics` return text format instead of JSON?</summary>
+<summary>Answer</summary>
 
 The `/api/metrics` endpoint returns **Prometheus Exposition Format** (`text/plain`), not JSON. This is the standard format for Prometheus metrics.
 
@@ -1304,8 +1352,10 @@ Create a separate endpoint like `/api/metrics/json` if you need JSON for other p
 
 </details>
 
+### How does Prometheus store metrics from `/api/metrics`?
+
 <details>
-<summary>How does Prometheus store metrics from `/api/metrics`?</summary>
+<summary>Answer</summary>
 
 The `/api/metrics` endpoint only returns a **snapshot** of current metrics at the moment of the request. Prometheus is responsible for storing historical data.
 
@@ -1366,8 +1416,10 @@ scrape_configs:
 
 </details>
 
+### What is Correlation ID and how does it work in SystemVibe?
+
 <details>
-<summary>What is Correlation ID and how does it work in SystemVibe?</summary>
+<summary>Answer</summary>
 
 **What is Correlation ID?**
 
@@ -1520,8 +1572,10 @@ docker compose logs worker-image | grep "my-trace-123"
 
 </details>
 
+### Who creates Correlation ID - client or server?
+
 <details>
-<summary>Who creates Correlation ID - client or server?</summary>
+<summary>Answer</summary>
 
 **Both can create - depending on the scenario:**
 
@@ -1590,8 +1644,10 @@ curl -I http://localhost:3000/api/jobs
 
 ## Testing
 
+### What are the criteria for writing tests?
+
 <details>
-<summary>What are the criteria for writing tests?</summary>
+<summary>Answer</summary>
 
 Writing tests in SystemVibe follows these criteria:
 
@@ -1639,8 +1695,10 @@ See details at [docs/TEST.md](./TEST.md)
 
 ## Kubernetes
 
+### Why does Cloud SQL Proxy appear in both API and Worker pods?
+
 <details>
-<summary>Why does Cloud SQL Proxy appear in both API and Worker pods?</summary>
+<summary>Answer</summary>
 
 **Because both services need to connect to the database through Cloud SQL Proxy.**
 
@@ -1676,8 +1734,10 @@ The sidecar pattern (proxy in same pod) is the recommended approach for Cloud SQ
 
 </details>
 
+### What does "2/2 Ready" mean in pod status?
+
 <details>
-<summary>What does "2/2 Ready" mean in pod status?</summary>
+<summary>Answer</summary>
 
 **"2/2 Ready" means 2 out of 2 containers in the pod are ready to accept traffic.**
 
@@ -1714,8 +1774,10 @@ cloud-sql-proxy      true
 
 </details>
 
+### Why don't I see Redis and PostgreSQL pods/containers like in Docker Compose?
+
 <details>
-<summary>Why don't I see Redis and PostgreSQL pods/containers like in Docker Compose?</summary>
+<summary>Answer</summary>
 
 **In GKE production, you use managed services instead of containers:**
 
@@ -1768,8 +1830,10 @@ Docker Compose (Local)                GKE (Production)
 
 </details>
 
+### How to scale Redis and PostgreSQL in production?
+
 <details>
-<summary>How to scale Redis and PostgreSQL in production?</summary>
+<summary>Answer</summary>
 
 **Current Setup (Development/Basic):**
 
@@ -1873,8 +1937,10 @@ DATABASE_REPLICA_URL: z.string().url().optional(), // Replica (reads)
 
 </details>
 
+### Does adding DB replicas increase read and write capacity?
+
 <details>
-<summary>Does adding DB replicas increase read and write capacity?</summary>
+<summary>Answer</summary>
 
 **No** - it depends on the type of replica:
 
@@ -1928,8 +1994,10 @@ DATABASE_REPLICA_URL: z.string().url().optional(), // Replica (reads)
 
 </details>
 
+### What about Prometheus and Grafana in production?
+
 <details>
-<summary>What about Prometheus and Grafana in production?</summary>
+<summary>Answer</summary>
 
 **Current Status:**
 
@@ -2022,8 +2090,10 @@ gcloud logging sinks create system-vibe-logs \
 
 </details>
 
+### What is Google Managed Prometheus (GMP)?
+
 <details>
-<summary>What is Google Managed Prometheus (GMP)?</summary>
+<summary>Answer</summary>
 
 **Google Managed Prometheus (GMP)** is Google Cloud's fully-managed Prometheus service for GKE clusters.
 
@@ -2108,8 +2178,10 @@ gcloud logging sinks create system-vibe-logs \
 
 </details>
 
+### Does GMP include Grafana?
+
 <details>
-<summary>Does GMP include Grafana?</summary>
+<summary>Answer</summary>
 
 **No** - Google Managed Prometheus (GMP) is only the managed Prometheus service. It does **not** include Grafana.
 
@@ -2152,8 +2224,10 @@ For most use cases:
 
 </details>
 
+### What are Cloud Monitoring Dashboards?
+
 <details>
-<summary>What are Cloud Monitoring Dashboards?</summary>
+<summary>Answer</summary>
 
 **Cloud Monitoring Dashboards** are Google Cloud's native visualization tool for metrics, built into the Google Cloud Console.
 
