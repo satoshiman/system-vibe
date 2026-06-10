@@ -21,5 +21,8 @@
     "distributed-systems"
   ],
   "author": "Truong Ngoc Vuong",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "@prisma/client": "^5.22.0"
+  }
 }

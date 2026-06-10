@@ -3,6 +3,9 @@ kind: Deployment
 metadata:
   name: worker-image
   namespace: system-vibe
+  labels:
+    app: worker-image
+    environment: development
 spec:
   replicas: 1
   selector:
@@ -12,10 +15,11 @@ spec:
     metadata:
       labels:
         app: worker-image
+        environment: development
     spec:
       containers:
         - name: worker
-          image: system-vibe-worker:latest
+          image: system-vibe-image-worker:latest
           imagePullPolicy: Never
           envFrom:
             - secretRef:

@@ -1,0 +1,33 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: prisma-migrate
+  namespace: system-vibe
+spec:
+  ttlSecondsAfterFinished: 3600
+  backoffLimit: 5
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: system-vibe-api:latest
+          imagePullPolicy: Never
+          command:
+            - sh
+            - -c
+            - |
+              echo "Waiting for PostgreSQL to be ready..."
+              until nc -z postgres 5432; do
+                echo "PostgreSQL not ready yet, waiting..."
+                sleep 2
+              done
+              echo "PostgreSQL ready, running migration..."
+              npx prisma migrate deploy --schema=packages/database/prisma/schema.prisma
+              echo "Migration complete!"
+          envFrom:
+            - secretRef:
+                name: system-vibe-secrets
+          env:
+            - name: DATABASE_URL
+              value: "postgresql://$(DB_USER):$(DB_PASSWORD)@postgres:5432/$(DB_NAME)"

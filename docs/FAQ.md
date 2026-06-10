@@ -851,6 +851,467 @@ upstream api {
 
 - Not identical to production environment (API in Docker)
 - Must ensure dependencies (Node version, packages) are consistent
+
+### Why shouldn't I increase replicas for DB and Redis when running minikube?
+
+<details>
+<summary>Answer</summary>
+
+When running SystemVibe in minikube for local development, you should **keep PostgreSQL and Redis at 1 replica**. Increasing replicas causes database inconsistency issues that are difficult to debug.
+
+**The Problem (Real Bug Example):**
+
+In a recent debugging session, the system had 3 PostgreSQL pods running:
+
+```bash
+kubectl get pods -n system-vibe -l app=postgres
+# Output: 3 pods running (postgres-6678dffd54-66vc5, -glhw8, -t4ch2)
+```
+
+This caused the following issue:
+
+1. **Migration ran successfully** on one PostgreSQL pod
+2. **API connected to a different pod** that didn't have the migration applied
+3. **Job creation failed** with error: `The table public.job does not exist`
+4. **Debugging was difficult** because logs showed migration success but API couldn't find tables
+
+**Why This Happens:**
+
+Minikube is designed for **single-node development**, not high availability:
+
+- **No shared storage**: Each pod has its own volume unless configured with a shared PVC
+- **Service routing**: Kubernetes Service load-balances requests across pods randomly
+- **No data synchronization**: Pods don't automatically replicate data between themselves
+- **StatefulSet complexity**: Setting up proper database clustering (PostgreSQL HA, Redis Sentinel) is complex and overkill for local development
+
+**When Multiple Replicas Are Safe:**
+
+Multiple replicas are safe **only** when:
+
+1. **Stateless services** (API, workers) - no data stored in pods
+2. **Properly configured clustering**:
+   - PostgreSQL: Patroni, Citus, or managed solutions (AWS RDS Multi-AZ)
+   - Redis: Redis Cluster, Redis Sentinel, or managed solutions (AWS ElastiCache)
+3. **Shared storage** with proper data synchronization
+4. **Production environments** with proper HA infrastructure
+
+**Recommended Configuration for Minikube:**
+
+```yaml
+# infra/k8s/minikube/postgres.yaml
+spec:
+  replicas: 1  # Keep at 1 for minikube
+
+# infra/k8s/minikube/redis.yaml
+spec:
+  replicas: 1  # Keep at 1 for minikube
+
+# infra/k8s/minikube/api-deployment.yaml
+spec:
+  replicas: 1  # Can increase for testing, but stateless
+```
+
+**Stateless services (API, workers) can be scaled** because they don't store data locally. Only stateful services (PostgreSQL, Redis) should remain at 1 replica in minikube.
+
+**Production vs Development:**
+
+| Environment        | PostgreSQL Replicas | Redis Replicas | Reason                                  |
+| ------------------ | ------------------- | -------------- | --------------------------------------- |
+| **Minikube (Dev)** | 1                   | 1              | No shared storage, avoids inconsistency |
+| **Production**     | 3+ (HA)             | 3+ (Cluster)   | Proper clustering with data sync        |
+
+**Lesson Learned:**
+
+The bug took significant debugging time because:
+
+- Multiple pods made it unclear which pod had the correct data
+- Service routing was non-deterministic (API connected to random pod)
+- Logs showed success on one side but failure on another
+- Root cause wasn't obvious without checking pod counts
+
+**Bottom Line:** For minikube local development, keep stateful services at 1 replica to avoid data inconsistency and difficult-to-debug issues.
+
+### Why use managed cloud services for Redis and DB in production instead of self-scaling replicas?
+
+<details>
+<summary>Answer</summary>
+
+In production environments (Google Cloud, AWS), it's **strongly recommended to use managed services** for Redis and PostgreSQL instead of self-scaling with Kubernetes replicas. Managed services provide built-in high availability, automated backups, and reduced operational burden.
+
+**Managed Services vs Self-Managed Replicas:**
+
+| Aspect                   | Managed Services (Recommended)        | Self-Managed K8s Replicas (Not Recommended) |
+| ------------------------ | ------------------------------------- | ------------------------------------------- |
+| **High Availability**    | Built-in multi-AZ, automatic failover | Complex to setup (Patroni, Redis Sentinel)  |
+| **Backups**              | Automated, point-in-time recovery     | Manual backup scripts required              |
+| **Patching**             | Automatic security updates            | Manual maintenance windows                  |
+| **Monitoring**           | Built-in metrics and alerts           | Custom monitoring setup needed              |
+| **Scaling**              | Auto-scaling with read replicas       | Manual scaling and connection management    |
+| **Security**             | VPC integration, encryption at rest   | Manual security configuration               |
+| **Operational Overhead** | Low (managed by cloud provider)       | High (DBA expertise required)               |
+
+**Recommended Managed Services:**
+
+**Google Cloud (GCP):**
+
+- **PostgreSQL**: Cloud SQL for PostgreSQL
+  - Multi-AZ deployment
+  - Automated backups (7-day retention)
+  - Point-in-time recovery (PITR)
+  - Read replicas for scaling
+  - Automatic failover (<30 seconds)
+
+- **Redis**: Memorystore for Redis
+  - Fully managed Redis service
+  - Automatic failover
+  - Backup and restore
+  - Scalable to multiple nodes
+
+**AWS:**
+
+- **PostgreSQL**: Amazon RDS for PostgreSQL
+  - Multi-AZ deployment
+  - Automated backups (1-35 day retention)
+  - Read replicas
+  - Automated minor version upgrades
+  - Enhanced monitoring
+
+- **Redis**: Amazon ElastiCache for Redis
+  - Cluster mode enabled
+  - Automatic failover
+  - Backup and restore
+  - Multi-AZ deployment
+
+**Why Self-Managed is Problematic in Production:**
+
+**1. Complexity of Database Clustering**
+
+Setting up PostgreSQL high availability requires:
+
+- Patroni for leader election
+- Etcd for distributed configuration
+- HAProxy for connection routing
+- Complex failover testing
+
+Setting up Redis clustering requires:
+
+- Redis Sentinel for high availability
+- Cluster mode configuration
+- Slot management
+- Failover coordination
+
+**2. Operational Burden**
+
+With self-managed replicas:
+
+- **Manual patching**: Security updates require downtime and testing
+- **Backup management**: Must implement and verify backup scripts
+- **Monitoring**: Must set up custom alerts for replication lag, disk space, etc.
+- **Disaster recovery**: Must test and document failover procedures
+- **Performance tuning**: Must optimize configuration manually
+
+**3. Data Consistency Risks**
+
+Even with proper clustering:
+
+- **Replication lag**: Read replicas may be slightly behind primary
+- **Split-brain scenarios**: Network partitions can cause data divergence
+- **Failover complexity**: Manual intervention may be required during failover
+- **Backup verification**: Must ensure backups are actually restorable
+
+**4. Cost Considerations**
+
+While managed services have a premium:
+
+- **DBA time is expensive**: Self-managed requires dedicated database expertise
+- **Downtime costs money**: Managed services have better uptime SLAs (99.99% vs 99.9%)
+- **Development velocity**: Teams focus on product features instead of DB maintenance
+
+**Recommended Architecture for Production:**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     VPC / Private Network                       │
+│                                                                  │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │              Kubernetes Cluster (GKE/EKS)                 │   │
+│  │                                                           │   │
+│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐   │   │
+│  │  │ API Pods     │  │ Worker Pods  │  │ Nginx Ingress│   │   │
+│  │  │ (Stateless)  │  │ (Stateless)  │  │              │   │   │
+│  │  └──────────────┘  └──────────────┘  └──────────────┘   │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                              │                                   │
+│                  ┌───────────┴───────────┐                     │
+│                  │                       │                     │
+│                  ▼                       ▼                     │
+│  ┌──────────────────────────┐  ┌──────────────────────────┐   │
+│  │  Cloud SQL (PostgreSQL)   │  │  Memorystore (Redis)       │   │
+│  │  - Multi-AZ Primary       │  │  - Cluster mode            │   │
+│  │  - Read Replicas         │  │  - Automatic failover      │   │
+│  │  - Automated Backups     │  │  - Backup & restore        │   │
+│  └──────────────────────────┘  └──────────────────────────┘   │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Connection Configuration:**
+
+**For Cloud SQL (PostgreSQL):**
+
+```typescript
+// apps/api/src/config/database.config.ts
+export default registerAs("database", () => ({
+  url: process.env.DATABASE_URL, // Provided by Cloud SQL
+  // Cloud SQL connection uses Cloud SQL Proxy or direct VPC connection
+}));
+```
+
+**For Memorystore (Redis):**
+
+```typescript
+// apps/api/src/config/queue.config.ts
+export default registerAs("queue", () => ({
+  redis: {
+    host: process.env.REDIS_HOST, // Memorystore endpoint
+    port: 6379,
+    password: process.env.REDIS_PASSWORD,
+  },
+}));
+```
+
+**Migration Strategy:**
+
+When moving from self-managed to managed services:
+
+1. **Data migration**: Use native migration tools (pg_dump, redis-dump)
+2. **Zero-downtime cutover**: Use read replicas to validate before switching
+3. **Connection string updates**: Update DATABASE_URL and REDIS_HOST in production
+4. **Monitoring**: Validate metrics post-migration
+5. **Cleanup**: Decommission self-managed replicas after validation
+
+**Cost Comparison Example (AWS):**
+
+| Service     | Self-Managed (3x r6g.large) | Amazon RDS (db.r6g.large) | Difference         |
+| ----------- | --------------------------- | ------------------------- | ------------------ |
+| **Compute** | $0.252/hr × 3 = $0.756/hr   | $0.252/hr × 1 = $0.252/hr | -67%               |
+| **Storage** | $0.10/GB × 100GB = $10/mo   | $0.10/GB × 100GB = $10/mo | Same               |
+| **Backup**  | Manual (time cost)          | $0.20/GB × 100GB = $20/mo | +$20               |
+| **Total**   | ~$550/mo + DBA time         | ~$200/mo                  | -64% + no DBA time |
+
+**Bottom Line:** Use managed services (Cloud SQL, Memorystore, RDS, ElastiCache) in production to reduce operational complexity, improve reliability, and focus engineering effort on product features rather than database administration.
+
+### What do CPU and memory resource configurations mean in Kubernetes?
+
+<details>
+<summary>Answer</summary>
+
+Kubernetes uses resource configurations to manage and allocate compute resources to containers. Understanding these configurations is crucial for proper application performance and cluster efficiency.
+
+**CPU Units: Millicores**
+
+Kubernetes uses **millicores (m)** as the unit for CPU:
+
+| Value     | Meaning             | Usage                          |
+| --------- | ------------------- | ------------------------------ |
+| **100m**  | 0.1 CPU core (10%)  | Lightweight services, sidecars |
+| **250m**  | 0.25 CPU core (25%) | Small APIs, background workers |
+| **500m**  | 0.5 CPU core (50%)  | Medium-load services           |
+| **1000m** | 1.0 CPU core (100%) | Standard production services   |
+| **2000m** | 2.0 CPU cores       | High-performance services      |
+
+**Example:**
+
+- `cpu: "1000m"` = 1 full CPU core
+- `cpu: "500m"` = half a CPU core
+- `cpu: "100m"` = 10% of a CPU core
+
+**Memory Units**
+
+Memory uses standard units:
+
+| Unit   | Value     | Usage                         |
+| ------ | --------- | ----------------------------- |
+| **Mi** | Megabytes | Common for small/medium pods  |
+| **Gi** | Gigabytes | Large applications, databases |
+| **Ki** | Kilobytes | Rarely used                   |
+
+**Example:**
+
+- `memory: "256Mi"` = 256 megabytes
+- `memory: "1Gi"` = 1 gigabyte
+- `memory: "512Mi"` = 512 megabytes
+
+**Requests vs Limits**
+
+```yaml
+resources:
+  requests:
+    cpu: "250m" # Guaranteed minimum CPU
+    memory: "256Mi" # Guaranteed minimum memory
+  limits:
+    cpu: "1000m" # Maximum CPU allowed
+    memory: "512Mi" # Maximum memory allowed
+```
+
+**Requests:**
+
+- **Guaranteed minimum** resources the pod needs
+- Kubernetes uses this for **scheduling decisions**
+- Pod won't be scheduled if node can't meet requests
+- Used for **quality of service (QoS)** classification
+
+**Limits:**
+
+- **Maximum** resources the pod can consume
+- Pod is **throttled** if it exceeds CPU limit
+- Pod is **terminated (OOMKilled)** if it exceeds memory limit
+- Optional (if not set, defaults to node capacity)
+
+**QoS Classes (Quality of Service):**
+
+| Configuration         | QoS Class      | Behavior                                   |
+| --------------------- | -------------- | ------------------------------------------ |
+| **requests = limits** | **Guaranteed** | Guaranteed resources, never evicted        |
+| **requests < limits** | **Burstable**  | Best-effort, can be evicted under pressure |
+| **no requests**       | **BestEffort** | Lowest priority, first to be evicted       |
+
+**Example Configurations:**
+
+**Development (Minikube):**
+
+```yaml
+# Low resource usage for dev
+resources:
+  requests:
+    cpu: "100m"
+    memory: "128Mi"
+  limits:
+    cpu: "500m"
+    memory: "256Mi"
+```
+
+**Production (Standard):**
+
+```yaml
+# Standard production pod
+resources:
+  requests:
+    cpu: "250m"
+    memory: "256Mi"
+  limits:
+    cpu: "1000m"
+    memory: "512Mi"
+```
+
+**Production (High Performance):**
+
+```yaml
+# High-load production pod
+resources:
+  requests:
+    cpu: "500m"
+    memory: "512Mi"
+  limits:
+    cpu: "2000m"
+    memory: "2Gi"
+```
+
+**How Kubernetes Uses These:**
+
+**Scheduling:**
+
+```
+Node with 4 CPU cores, 8GB RAM:
+
+┌─────────────────────────────────────┐
+│  Pod A (requests: 1000m, 512Mi)   │ ✅ Can schedule
+│  Pod B (requests: 1000m, 512Mi)   │ ✅ Can schedule
+│  Pod C (requests: 1000m, 512Mi)   │ ✅ Can schedule
+│  Pod D (requests: 1000m, 512Mi)   │ ✅ Can schedule
+│  Pod E (requests: 1000m, 512Mi)   │ ❌ No space left
+└─────────────────────────────────────┘
+```
+
+**Throttling (CPU):**
+
+- If pod exceeds CPU limit, Kubernetes throttles CPU
+- Application slows down but doesn't crash
+- Visible as high CPU usage in metrics
+
+**OOM Kill (Memory):**
+
+- If pod exceeds memory limit, Linux OOM killer terminates it
+- Pod restarts with `OOMKilled` status
+- Data in memory is lost
+
+**Best Practices:**
+
+**1. Set Both Requests and Limits**
+
+```yaml
+resources:
+  requests:
+    cpu: "250m"
+    memory: "256Mi"
+  limits:
+    cpu: "1000m"
+    memory: "512Mi"
+```
+
+**2. Keep Requests Realistic**
+
+- Set requests based on actual usage (monitor with `kubectl top`)
+- Too high: Wastes resources, reduces cluster capacity
+- Too low: Pod gets throttled, performance degrades
+
+**3. Set Limits Higher Than Requests**
+
+- Allows burst capacity for traffic spikes
+- Typical ratio: limits = 2-4x requests
+- Prevents resource starvation during load spikes
+
+**4. Monitor and Adjust**
+
+```bash
+# Check current resource usage
+kubectl top pods -n system-vibe
+
+# Check node capacity
+kubectl describe nodes | grep -A 5 "Allocated resources"
+```
+
+**5. Different Configs for Different Environments**
+
+| Environment     | CPU Request | CPU Limit | Memory Request | Memory Limit |
+| --------------- | ----------- | --------- | -------------- | ------------ |
+| **Development** | 100m        | 500m      | 128Mi          | 256Mi        |
+| **Staging**     | 250m        | 1000m     | 256Mi          | 512Mi        |
+| **Production**  | 500m        | 2000m     | 512Mi          | 2Gi          |
+
+**SystemVibe Example:**
+
+```yaml
+# infra/k8s/minikube/api-deployment.yaml
+resources:
+  requests:
+    cpu: "250m" # 0.25 core minimum
+    memory: "256Mi" # 256MB minimum
+  limits:
+    cpu: "1000m" # 1 core maximum
+    memory: "512Mi" # 512MB maximum
+```
+
+This configuration:
+
+- Guarantees 0.25 CPU core and 256MB RAM
+- Allows burst up to 1 CPU core and 512MB RAM
+- Suitable for development and light production
+- Can be scaled horizontally (add more pods)
+
+**Bottom Line:** Set requests based on baseline usage, set limits 2-4x higher for burst capacity, monitor actual usage, and adjust configurations based on environment (dev vs production).
+
+</details>
 - Potential port conflicts when running multiple services
 
 **Production Setup:**

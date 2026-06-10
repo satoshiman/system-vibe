@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { ValidationPipe } from '@nestjs/common';
 import pino from 'pino';
 import pinoHttp from 'pino-http';
 import { v4 as uuidv4 } from 'uuid';
@@ -23,6 +24,14 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     logger: false, // Disable default NestJS logger, use Pino instead
   });
+
+  // Enable validation pipe
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      transform: true,
+    })
+  );
 
   // Configure pino-http with correlation IDs
   app.use(
